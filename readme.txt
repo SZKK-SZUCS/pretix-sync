@@ -25,6 +25,9 @@ Badge printing (optional, v1.2)
 - Per attendee the plugin creates a 0 € pass order there (no email) and links it to the attendee's pass.
   Badges → layout with a QR code whose content is "Reusable Medium ID"; Export → Badges prints them all.
 - Existing attendees: tools page → "Re-run sync for all orders" creates the missing badge tickets.
+- Team name: the order's custom field "team_name" (checkout field / complimentary form) is written to the badge
+  ticket's "Company" field. In the badge layout add a text element with content "Attendee company". A changed team
+  name is picked up by "Re-run sync for all orders".
 - Name edits update the badge ticket; revoke/refund cancels it.
 
 Filters: fss_pretix_email_subject, fss_pretix_email_body ($value, $type, $attendee, $order)

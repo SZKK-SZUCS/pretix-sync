@@ -82,7 +82,7 @@ class FSS_Pretix_Admin {
 		echo '<h2>Actions</h2>';
 		self::tool_button( 'test', 'Test pretix connection' );
 		self::tool_button( 'export', 'Download pass list (CSV)' );
-		self::tool_button( 'resync_all', 'Re-run sync for all orders (also creates missing badge tickets)' );
+		self::tool_button( 'resync_all', 'Re-run sync for all orders (also creates missing badge tickets and updates team names)' );
 		self::tool_button( 'reconcile', 'Re-link all lecture registrations to passes' );
 
 		echo '<h2>Lecture registration</h2>';

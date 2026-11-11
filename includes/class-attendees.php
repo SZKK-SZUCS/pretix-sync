@@ -7,6 +7,8 @@ defined( 'ABSPATH' ) || exit;
  * Attendees live on the order line item as meta "_fss_attendees": a list of arrays with
  *   title, given_name, family_name, email            – entered at checkout
  *   medium_id, medium_identifier                      – phase 1 (pass QR)
+ *   pass_order, pass_position, pass_linked, pass_company – badge ticket in the passes event; pass_company is the
+ *                                                       team name last written to it (to detect changes)
  *   customer_id, customer_new, membership_id          – phase 2 (lecture registration right)
  *   status: new | pass | registered | revoked | error
  *   error                                             – last error message
@@ -61,6 +63,14 @@ class FSS_Pretix_Attendees {
 			'given_name'  => $a['given_name'],
 			'family_name' => $a['family_name'],
 		);
+	}
+
+	/**
+	 * Team name of the order, printed on the badge. It is an order-level custom field ("team_name", added by the
+	 * Checkout Form plugin at checkout; the complimentary form sets the same key), not part of the attendee data.
+	 */
+	public static function team_name( $order ) {
+		return trim( (string) $order->get_meta( 'team_name' ) );
 	}
 
 	public static function full_name( $a ) {
