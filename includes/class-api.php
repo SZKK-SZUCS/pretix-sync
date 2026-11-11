@@ -219,7 +219,18 @@ class FSS_Pretix_API {
 		return self::org() . 'events/' . rawurlencode( FSS_Pretix_Settings::get( 'passes_event' ) ) . '/';
 	}
 
-	public static function create_pass_order( $email, $item_id, $name_parts, $comment ) {
+	/**
+	 * @param string $company Team name; pretix prints it on the badge via the "Attendee company" element.
+	 */
+	public static function create_pass_order( $email, $item_id, $name_parts, $comment, $company = '' ) {
+		$position = array(
+			'item'                => (int) $item_id,
+			'attendee_name_parts' => $name_parts,
+			'attendee_email'      => $email,
+		);
+		if ( '' !== $company ) {
+			$position['company'] = $company;
+		}
 		return self::request( 'POST', self::pev() . 'orders/', array(
 			'email'      => $email,
 			'locale'     => FSS_Pretix_Settings::get( 'locale' ),
@@ -228,13 +239,7 @@ class FSS_Pretix_API {
 			'send_email' => false,
 			'force'      => true,
 			'comment'    => $comment,
-			'positions'  => array(
-				array(
-					'item'                => (int) $item_id,
-					'attendee_name_parts' => $name_parts,
-					'attendee_email'      => $email,
-				),
-			),
+			'positions'  => array( $position ),
 		) );
 	}
 

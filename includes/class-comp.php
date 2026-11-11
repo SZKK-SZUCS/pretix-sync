@@ -52,7 +52,8 @@ class FSS_Pretix_Comp {
 			echo '<option value="' . (int) $p->get_id() . '">' . esc_html( $p->get_name() ) . '</option>';
 		}
 		echo '</select></td></tr>';
-		echo '<tr><th>Reason / note</th><td><input type="text" name="note" style="width:100%" placeholder="e.g. Competition winner – LinkedIn giveaway" required></td></tr></table>';
+		echo '<tr><th>Reason / note</th><td><input type="text" name="note" style="width:100%" placeholder="e.g. Competition winner – LinkedIn giveaway" required></td></tr>';
+		echo '<tr><th>Team name</th><td><input type="text" name="team_name" style="width:100%" placeholder="Printed on the badge (optional)"></td></tr></table>';
 		echo '<table class="widefat striped" style="max-width:900px"><thead><tr><th>#</th><th>Title</th><th>Given name *</th><th>Family name *</th><th>Email *</th></tr></thead><tbody>';
 		for ( $i = 0; $i < 5; $i++ ) {
 			echo '<tr><td>' . ( $i + 1 ) . '</td>';
@@ -73,6 +74,7 @@ class FSS_Pretix_Comp {
 
 		$product = wc_get_product( isset( $_POST['product_id'] ) ? absint( $_POST['product_id'] ) : 0 );
 		$note    = isset( $_POST['note'] ) ? sanitize_text_field( wp_unslash( $_POST['note'] ) ) : '';
+		$team    = isset( $_POST['team_name'] ) ? sanitize_text_field( wp_unslash( $_POST['team_name'] ) ) : '';
 		$rows    = isset( $_POST['att'] ) && is_array( $_POST['att'] ) ? wp_unslash( $_POST['att'] ) : array(); // phpcs:ignore
 
 		$attendees = array();
@@ -124,6 +126,10 @@ class FSS_Pretix_Comp {
 		$order->set_billing_email( $first['email'] );
 		$order->update_meta_data( FSS_Pretix_Attendees::ORDER_FLAG, 'yes' );
 		$order->update_meta_data( '_fss_complimentary', $note );
+		if ( '' !== $team ) {
+			// Same key the checkout field uses, so the badge logic does not need to know the order's origin.
+			$order->update_meta_data( 'team_name', $team );
+		}
 		$order->calculate_totals( false );
 		$order->set_status( self::STATUS, 'Complimentary ticket – ' . $note . ' (created by ' . wp_get_current_user()->user_login . ').' );
 		$order->save();

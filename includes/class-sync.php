@@ -203,18 +203,22 @@ class FSS_Pretix_Sync {
 			return null;
 		}
 
+		$team = FSS_Pretix_Attendees::team_name( $order );
+
 		if ( empty( $a['pass_order'] ) ) {
 			$o = FSS_Pretix_API::create_pass_order(
 				$a['email'],
 				$pass_item,
 				FSS_Pretix_Attendees::name_parts( $a ),
-				'WooCommerce #' . $order->get_order_number() . ' – ' . $item->get_name()
+				'WooCommerce #' . $order->get_order_number() . ' – ' . $item->get_name(),
+				$team
 			);
 			if ( is_wp_error( $o ) ) {
 				return $o;
 			}
 			$a['pass_order']    = $o['code'];
 			$a['pass_position'] = (int) $o['positions'][0]['id'];
+			$a['pass_company']  = $team;
 			$save();
 		}
 
@@ -226,6 +230,32 @@ class FSS_Pretix_Sync {
 			$a['pass_linked'] = 1;
 			$save();
 		}
+
+		// Runs for new and existing passes alike, so "Re-run sync for all orders" fills in the team name on passes
+		// created before this field was sent, and picks up later edits of the order's team name.
+		return self::sync_pass_company( $a, $team, $save );
+	}
+
+	/**
+	 * Writes the team name to the badge ticket's "company" field when it differs from what was written last.
+	 *
+	 * Only transient errors are returned (the queue retries them). Any other failure is already in the log and is
+	 * deliberately not fatal: the team name is cosmetic and must not block the lecture registration. The stored
+	 * value stays unchanged, so the next sync tries again.
+	 *
+	 * @return WP_Error|null
+	 */
+	private static function sync_pass_company( &$a, $team, $save ) {
+		$written = isset( $a['pass_company'] ) ? $a['pass_company'] : '';
+		if ( $written === $team || ! empty( $a['pass_canceled'] ) ) {
+			return null;
+		}
+		$r = FSS_Pretix_API::update_pass_position( $a['pass_position'], array( 'company' => $team ) );
+		if ( is_wp_error( $r ) ) {
+			return FSS_Pretix_API::is_transient( $r ) ? $r : null;
+		}
+		$a['pass_company'] = $team;
+		$save();
 		return null;
 	}
 
