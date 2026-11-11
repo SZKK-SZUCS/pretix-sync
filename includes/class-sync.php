@@ -1,0 +1,461 @@
+<?php
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * WooCommerce → pretix synchronisation.
+ *
+ * Phase 1 (always, right after payment): one reusable medium (the pass QR) per attendee + "ticket" email.
+ * Phase 2 (once lecture registration is open): pretix customer account + membership, medium linked to the
+ *          customer, "open"/"welcome" email.
+ * Every step stores its result immediately, so a re-run only does what is still missing.
+ */
+class FSS_Pretix_Sync {
+
+	const MAX_ATTEMPTS = 5;
+
+	public static function init() {
+		add_action( 'woocommerce_order_status_processing', array( __CLASS__, 'enqueue_order' ) );
+		add_action( 'woocommerce_order_status_completed', array( __CLASS__, 'enqueue_order' ) );
+		add_action( 'woocommerce_order_status_refunded', array( __CLASS__, 'enqueue_revoke_order' ) );
+		add_action( 'woocommerce_order_status_cancelled', array( __CLASS__, 'enqueue_revoke_order' ) );
+
+		add_action( 'fss_pretix_sync_order', array( __CLASS__, 'sync_order' ), 10, 2 );
+		add_action( 'fss_pretix_revoke_order', array( __CLASS__, 'revoke_order' ), 10, 2 );
+	}
+
+	/* ---------- queueing ---------- */
+
+	public static function enqueue_order( $order_id ) {
+		$order = wc_get_order( $order_id );
+		if ( ! $order || 'yes' !== $order->get_meta( FSS_Pretix_Attendees::ORDER_FLAG ) ) {
+			return;
+		}
+		fss_pretix_enqueue( 'fss_pretix_sync_order', array( (int) $order_id, 0 ) );
+	}
+
+	public static function enqueue_revoke_order( $order_id ) {
+		$order = wc_get_order( $order_id );
+		if ( ! $order || 'yes' !== $order->get_meta( FSS_Pretix_Attendees::ORDER_FLAG ) ) {
+			return;
+		}
+		fss_pretix_enqueue( 'fss_pretix_revoke_order', array( (int) $order_id, 0 ) );
+	}
+
+	private static function retry( $hook, $order_id, $attempt ) {
+		if ( $attempt + 1 >= self::MAX_ATTEMPTS ) {
+			return false;
+		}
+		$delays = array( 60, 300, 900, 3600, 10800 );
+		as_schedule_single_action( time() + $delays[ $attempt ], $hook, array( (int) $order_id, $attempt + 1 ), FSS_PRETIX_AS_GROUP );
+		return true;
+	}
+
+	/* ---------- sync ---------- */
+
+	public static function sync_order( $order_id, $attempt = 0 ) {
+		$order = wc_get_order( $order_id );
+		if ( ! $order || ! in_array( $order->get_status(), array( 'processing', 'completed', FSS_Pretix_Comp::STATUS ), true ) ) {
+			return;
+		}
+		$open      = FSS_Pretix_Settings::registration_open();
+		$transient = false;
+		$errors    = array();
+		$done      = array();
+
+		foreach ( FSS_Pretix_Attendees::for_order( $order ) as $row ) {
+			$a = $row['data'];
+			if ( isset( $a['status'] ) && 'revoked' === $a['status'] ) {
+				continue;
+			}
+			$err = self::sync_attendee( $order, $row['item'], $row['index'], $a, $open );
+			if ( $err ) {
+				if ( FSS_Pretix_API::is_transient( $err ) ) {
+					$transient = true;
+				} else {
+					$errors[] = FSS_Pretix_Attendees::full_name( $a ) . ': ' . $err->get_error_message();
+				}
+			} else {
+				$done[] = FSS_Pretix_Attendees::full_name( $a );
+			}
+		}
+
+		if ( $done ) {
+			$order->add_order_note( sprintf( 'pretix: %s synced (%s): %s', $open ? 'pass + lecture registration' : 'pass', count( $done ), implode( ', ', $done ) ) );
+		}
+		if ( $errors ) {
+			$order->add_order_note( "pretix sync ERROR:\n" . implode( "\n", $errors ) );
+			self::notify_admin( $order, $errors );
+		}
+		if ( $transient ) {
+			if ( self::retry( 'fss_pretix_sync_order', $order_id, $attempt ) ) {
+				$order->add_order_note( 'pretix temporarily unreachable – sync will be retried automatically.' );
+			} else {
+				$order->add_order_note( 'pretix sync failed after several attempts. Use "Re-run pretix sync" on this order.' );
+				self::notify_admin( $order, array( 'pretix unreachable after ' . self::MAX_ATTEMPTS . ' attempts' ) );
+			}
+		}
+	}
+
+	/**
+	 * @return WP_Error|null
+	 */
+	public static function sync_attendee( $order, $item, $index, &$a, $open ) {
+		$save = function () use ( $item, $index, &$a ) {
+			FSS_Pretix_Attendees::save( $item, $index, $a );
+		};
+		$fail = function ( $err ) use ( &$a, $save ) {
+			$a['error'] = $err->get_error_message();
+			if ( ! FSS_Pretix_API::is_transient( $err ) ) {
+				$a['status'] = 'error';
+			}
+			$save();
+			return $err;
+		};
+		unset( $a['error'] );
+
+		// Phase 1: the pass.
+		if ( empty( $a['medium_id'] ) ) {
+			$m = FSS_Pretix_API::create_medium( FSS_Pretix_Attendees::full_name( $a ) . ' (#' . $order->get_order_number() . ')' );
+			if ( is_wp_error( $m ) ) {
+				return $fail( $m );
+			}
+			$a['medium_id']         = (int) $m['id'];
+			$a['medium_identifier'] = $m['identifier'];
+			$a['status']            = 'pass';
+			$save();
+		}
+
+		// Phase 1b: pass ticket in the passes event (for badge printing), linked to the pass.
+		$err = self::sync_pass_ticket( $order, $item, $a, $save );
+		if ( $err ) {
+			return $fail( $err );
+		}
+
+		if ( ! $open ) {
+			if ( empty( $a['mail_ticket'] ) ) {
+				FSS_Pretix_Mailer::send( 'ticket', $a, $order );
+				$a['mail_ticket'] = time();
+			}
+			$a['status'] = 'pass';
+			$save();
+			return null;
+		}
+
+		// Phase 2: account + membership.
+		if ( empty( $a['customer_id'] ) ) {
+			$c = FSS_Pretix_API::find_customer_by_email( $a['email'] );
+			if ( is_wp_error( $c ) ) {
+				return $fail( $c );
+			}
+			if ( $c ) {
+				$a['customer_new'] = false;
+			} else {
+				$c = FSS_Pretix_API::create_customer( $a['email'], FSS_Pretix_Attendees::name_parts( $a ), true );
+				if ( is_wp_error( $c ) ) {
+					return $fail( $c );
+				}
+				$a['customer_new'] = true;
+			}
+			$a['customer_id'] = $c['identifier'];
+			$save();
+		}
+
+		if ( empty( $a['membership_id'] ) ) {
+			$ms = FSS_Pretix_API::create_membership( $a['customer_id'], FSS_Pretix_Attendees::name_parts( $a ) );
+			if ( is_wp_error( $ms ) ) {
+				return $fail( $ms );
+			}
+			$a['membership_id'] = (int) $ms['id'];
+			$save();
+		}
+
+		if ( empty( $a['medium_linked'] ) ) {
+			$r = FSS_Pretix_API::update_medium( $a['medium_id'], array( 'customer' => $a['customer_id'] ) );
+			if ( is_wp_error( $r ) ) {
+				return $fail( $r );
+			}
+			$a['medium_linked'] = 1;
+			$save();
+		}
+
+		if ( empty( $a['mail_open'] ) ) {
+			FSS_Pretix_Mailer::send( empty( $a['mail_ticket'] ) ? 'welcome' : 'open', $a, $order );
+			$a['mail_open'] = time();
+		}
+		$a['status'] = 'registered';
+		$save();
+		return null;
+	}
+
+	/**
+	 * Creates the attendee's pass ticket (0 € order in the passes event) and links it to their pass, so the
+	 * pretix badge exporter can print the badge with the pass QR ("Reusable Medium ID"). Does nothing when no
+	 * passes event is configured or the WooCommerce product has no pass item.
+	 *
+	 * @return WP_Error|null
+	 */
+	private static function sync_pass_ticket( $order, $item, &$a, $save ) {
+		if ( ! FSS_Pretix_Settings::passes_enabled() || empty( $a['medium_id'] ) ) {
+			return null;
+		}
+		$pass_item = FSS_Pretix_Settings::pass_item_for( $item->get_product() );
+		if ( ! $pass_item ) {
+			return null;
+		}
+
+		if ( empty( $a['pass_order'] ) ) {
+			$o = FSS_Pretix_API::create_pass_order(
+				$a['email'],
+				$pass_item,
+				FSS_Pretix_Attendees::name_parts( $a ),
+				'WooCommerce #' . $order->get_order_number() . ' – ' . $item->get_name()
+			);
+			if ( is_wp_error( $o ) ) {
+				return $o;
+			}
+			$a['pass_order']    = $o['code'];
+			$a['pass_position'] = (int) $o['positions'][0]['id'];
+			$save();
+		}
+
+		if ( empty( $a['pass_linked'] ) ) {
+			$r = FSS_Pretix_Webhook::update_links( $a['medium_id'], array(), array( $a['pass_position'] ) );
+			if ( is_wp_error( $r ) ) {
+				return $r;
+			}
+			$a['pass_linked'] = 1;
+			$save();
+		}
+		return null;
+	}
+
+	/* ---------- revoke ---------- */
+
+	public static function revoke_order( $order_id, $attempt = 0 ) {
+		$order = wc_get_order( $order_id );
+		if ( ! $order ) {
+			return;
+		}
+		$transient = false;
+		$errors    = array();
+		$done      = array();
+		foreach ( FSS_Pretix_Attendees::for_order( $order ) as $row ) {
+			$a = $row['data'];
+			if ( isset( $a['status'] ) && 'revoked' === $a['status'] ) {
+				continue;
+			}
+			$err = self::revoke_attendee( $order, $row['item'], $row['index'], $a );
+			if ( $err ) {
+				if ( FSS_Pretix_API::is_transient( $err ) ) {
+					$transient = true;
+				} else {
+					$errors[] = FSS_Pretix_Attendees::full_name( $a ) . ': ' . $err->get_error_message();
+				}
+			} else {
+				$done[] = FSS_Pretix_Attendees::full_name( $a );
+			}
+		}
+		if ( $done ) {
+			$order->add_order_note( 'pretix: revoked pass / lecture registrations for ' . implode( ', ', $done ) );
+		}
+		if ( $errors ) {
+			$order->add_order_note( "pretix revoke ERROR:\n" . implode( "\n", $errors ) );
+			self::notify_admin( $order, $errors );
+		}
+		if ( $transient && ! self::retry( 'fss_pretix_revoke_order', $order_id, $attempt ) ) {
+			$order->add_order_note( 'pretix revoke failed after several attempts – please check manually.' );
+		}
+	}
+
+	/**
+	 * Cancels the attendee's lecture registrations, invalidates the membership and deactivates the pass.
+	 *
+	 * @return WP_Error|null
+	 */
+	public static function revoke_attendee( $order, $item, $index, &$a ) {
+		$save = function () use ( $item, $index, &$a ) {
+			FSS_Pretix_Attendees::save( $item, $index, $a );
+		};
+
+		// 1. Lecture registrations – unless the same pretix account still holds another valid ticket.
+		if ( ! empty( $a['customer_id'] ) && empty( $a['regs_canceled'] ) ) {
+			$key = FSS_Pretix_Attendees::key( $order, $item, $index );
+			if ( ! self::customer_has_other_ticket( $a['customer_id'], $key ) ) {
+				$page = 1;
+				do {
+					$list = FSS_Pretix_API::list_orders( array( 'customer' => $a['customer_id'], 'page' => (string) $page ) );
+					if ( is_wp_error( $list ) ) {
+						$a['error'] = $list->get_error_message();
+						$save();
+						return $list;
+					}
+					foreach ( $list['results'] as $o ) {
+						if ( in_array( $o['status'], array( 'p', 'n' ), true ) ) {
+							$r = FSS_Pretix_API::cancel_order( $o['code'] );
+							if ( is_wp_error( $r ) ) {
+								$a['error'] = $r->get_error_message();
+								$save();
+								return $r;
+							}
+						}
+					}
+					$page++;
+				} while ( ! empty( $list['next'] ) );
+			}
+			$a['regs_canceled'] = 1;
+			$save();
+		}
+
+		// 2. Membership.
+		if ( ! empty( $a['membership_id'] ) && empty( $a['membership_revoked'] ) ) {
+			$r = FSS_Pretix_API::revoke_membership( $a['membership_id'] );
+			if ( is_wp_error( $r ) ) {
+				$a['error'] = $r->get_error_message();
+				$save();
+				return $r;
+			}
+			$a['membership_revoked'] = 1;
+			$save();
+		}
+
+		// 3. Pass ticket (badge).
+		if ( ! empty( $a['pass_order'] ) && empty( $a['pass_canceled'] ) ) {
+			$r = FSS_Pretix_API::cancel_pass_order( $a['pass_order'] );
+			if ( is_wp_error( $r ) ) {
+				$d = $r->get_error_data();
+				// 400 = already canceled; anything else is a real error.
+				if ( ! isset( $d['status'] ) || 400 !== (int) $d['status'] ) {
+					$a['error'] = $r->get_error_message();
+					$save();
+					return $r;
+				}
+			}
+			$a['pass_canceled'] = 1;
+			$save();
+		}
+
+		// 4. Pass.
+		if ( ! empty( $a['medium_id'] ) && empty( $a['medium_revoked'] ) ) {
+			$r = FSS_Pretix_API::update_medium( $a['medium_id'], array( 'active' => false, 'linked_orderpositions' => array() ) );
+			if ( is_wp_error( $r ) ) {
+				$a['error'] = $r->get_error_message();
+				$save();
+				return $r;
+			}
+			$a['medium_revoked'] = 1;
+		}
+
+		unset( $a['error'] );
+		$a['status']     = 'revoked';
+		$a['revoked_at'] = time();
+		$save();
+		return null;
+	}
+
+	/** Does another, non-revoked attendee record use the same pretix account? */
+	private static function customer_has_other_ticket( $customer_id, $exclude_key ) {
+		foreach ( FSS_Pretix_Attendees::order_ids() as $oid ) {
+			$o = wc_get_order( $oid );
+			if ( ! $o ) {
+				continue;
+			}
+			foreach ( FSS_Pretix_Attendees::for_order( $o ) as $row ) {
+				$d = $row['data'];
+				if ( FSS_Pretix_Attendees::key( $o, $row['item'], $row['index'] ) === $exclude_key ) {
+					continue;
+				}
+				if ( ! empty( $d['customer_id'] ) && $d['customer_id'] === $customer_id && ( ! isset( $d['status'] ) || 'revoked' !== $d['status'] ) ) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/* ---------- admin edits ---------- */
+
+	/**
+	 * Name change: update membership + pass label in place.
+	 * Email change: revoke the old record and create a fresh one (new pass!) for the new email.
+	 *
+	 * @return WP_Error|string  message
+	 */
+	public static function edit_attendee( $order, $item, $index, $new ) {
+		$list = $item->get_meta( FSS_Pretix_Attendees::ITEM_META );
+		$a    = $list[ $index ];
+
+		if ( strtolower( $new['email'] ) !== strtolower( $a['email'] ) ) {
+			if ( ! isset( $a['status'] ) || 'revoked' !== $a['status'] ) {
+				$err = self::revoke_attendee( $order, $item, $index, $a );
+				if ( $err ) {
+					return $err;
+				}
+			}
+			$history   = isset( $a['history'] ) ? $a['history'] : array();
+			$old       = $a;
+			unset( $old['history'] );
+			$history[] = $old;
+			$fresh     = array(
+				'title'       => $new['title'],
+				'given_name'  => $new['given_name'],
+				'family_name' => $new['family_name'],
+				'email'       => strtolower( $new['email'] ),
+				'status'      => 'new',
+				'history'     => $history,
+			);
+			FSS_Pretix_Attendees::save( $item, $index, $fresh );
+			$err = self::sync_attendee( $order, $item, $index, $fresh, FSS_Pretix_Settings::registration_open() );
+			if ( $err ) {
+				return $err;
+			}
+			return 'Attendee replaced. The previous pass was deactivated – a NEW pass QR code has been issued (reprint the badge).';
+		}
+
+		$a['title']       = $new['title'];
+		$a['given_name']  = $new['given_name'];
+		$a['family_name'] = $new['family_name'];
+		FSS_Pretix_Attendees::save( $item, $index, $a );
+
+		if ( ! empty( $a['membership_id'] ) ) {
+			$r = FSS_Pretix_API::update_membership( $a['membership_id'], array( 'attendee_name_parts' => FSS_Pretix_Attendees::name_parts( $a ) ) );
+			if ( is_wp_error( $r ) ) {
+				return $r;
+			}
+		}
+		if ( ! empty( $a['pass_position'] ) && empty( $a['pass_canceled'] ) ) {
+			$r = FSS_Pretix_API::update_pass_position( $a['pass_position'], array( 'attendee_name_parts' => FSS_Pretix_Attendees::name_parts( $a ) ) );
+			if ( is_wp_error( $r ) ) {
+				return $r;
+			}
+		}
+		if ( ! empty( $a['medium_id'] ) ) {
+			$r = FSS_Pretix_API::update_medium( $a['medium_id'], array( 'label' => FSS_Pretix_Attendees::full_name( $a ) . ' (#' . $order->get_order_number() . ')' ) );
+			if ( is_wp_error( $r ) ) {
+				return $r;
+			}
+		}
+		return 'Attendee name updated (membership, pass label and badge ticket). Lecture registrations made before this change keep the old name in pretix.';
+	}
+
+	/* ---------- helpers ---------- */
+
+	private static function notify_admin( $order, $errors ) {
+		$to = get_option( 'admin_email' );
+		wp_mail(
+			$to,
+			sprintf( '[FSS pretix] Sync problem on order #%s', $order->get_order_number() ),
+			"Order: " . $order->get_edit_order_url() . "\n\n" . implode( "\n", $errors )
+		);
+	}
+
+	/** Open lecture registration: flag + queue every paid order. */
+	public static function open_registration() {
+		update_option( 'fss_pretix_registration_open', 'yes' );
+		update_option( 'fss_pretix_registration_opened_at', time() );
+		$ids = FSS_Pretix_Attendees::order_ids();
+		foreach ( $ids as $id ) {
+			fss_pretix_enqueue( 'fss_pretix_sync_order', array( (int) $id, 0 ) );
+		}
+		return count( $ids );
+	}
+}

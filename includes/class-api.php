@@ -1,0 +1,252 @@
+<?php
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * Minimal pretix REST API client.
+ *
+ * Every method returns the decoded JSON array on success or a WP_Error.
+ * WP_Error codes: 'fss_http_<status>' (data: status, body) or 'fss_network'.
+ */
+class FSS_Pretix_API {
+
+	private static function request( $method, $path, $body = null, $query = array() ) {
+		$token = FSS_Pretix_Settings::token();
+		if ( ! $token ) {
+			return new WP_Error( 'fss_config', 'FSS_PRETIX_TOKEN is not defined in wp-config.php' );
+		}
+		$url = FSS_Pretix_Settings::base_url() . '/api/v1/' . ltrim( $path, '/' );
+		if ( $query ) {
+			$url = add_query_arg( array_map( 'rawurlencode', $query ), $url );
+		}
+		$args = array(
+			'method'  => $method,
+			'timeout' => 20,
+			'headers' => array(
+				'Authorization' => 'Token ' . $token,
+				'Accept'        => 'application/json',
+			),
+		);
+		if ( null !== $body ) {
+			$args['headers']['Content-Type'] = 'application/json';
+			$args['body']                    = wp_json_encode( $body );
+		}
+
+		$response = wp_remote_request( $url, $args );
+		if ( is_wp_error( $response ) ) {
+			return new WP_Error( 'fss_network', $response->get_error_message() );
+		}
+		$status = (int) wp_remote_retrieve_response_code( $response );
+		$raw    = wp_remote_retrieve_body( $response );
+		$data   = json_decode( $raw, true );
+
+		if ( $status >= 200 && $status < 300 ) {
+			return is_array( $data ) ? $data : array();
+		}
+		fss_pretix_log( sprintf( '%s %s → %d %s', $method, $path, $status, $raw ), 'warning' );
+		return new WP_Error( 'fss_http_' . $status, sprintf( 'pretix API %s %s returned %d: %s', $method, $path, $status, wp_strip_all_tags( substr( $raw, 0, 500 ) ) ), array( 'status' => $status, 'body' => $data ) );
+	}
+
+	/** True if the error is worth retrying later (network, 429, 5xx). */
+	public static function is_transient( $error ) {
+		if ( ! is_wp_error( $error ) ) {
+			return false;
+		}
+		if ( 'fss_network' === $error->get_error_code() ) {
+			return true;
+		}
+		$data = $error->get_error_data();
+		$s    = isset( $data['status'] ) ? (int) $data['status'] : 0;
+		return 429 === $s || $s >= 500;
+	}
+
+	private static function org() {
+		return 'organizers/' . rawurlencode( FSS_Pretix_Settings::get( 'organizer' ) ) . '/';
+	}
+
+	/* ---------- connection test ---------- */
+
+	public static function test() {
+		// Each call checks one permission the plugin needs (the membership type itself is not readable
+		// without organizer "Settings" access, so it is not queried).
+		$checks = array(
+			'Customers (organizer)'      => array( self::org() . 'customers/', array( 'email' => 'connection-test@invalid.invalid' ) ),
+			'Memberships (organizer)'    => array( self::org() . 'memberships/', array( 'membership_type' => (string) (int) FSS_Pretix_Settings::get( 'membership_type' ) ) ),
+			'Reusable media (organizer)' => array( self::org() . 'reusablemedia/', array( 'type' => 'barcode' ) ),
+			'Lectures event'             => array( self::ev(), array() ),
+			'Orders (lectures event)'    => array( self::ev() . 'orders/', array( 'code' => 'XXXXX' ) ),
+		);
+		if ( FSS_Pretix_Settings::passes_enabled() ) {
+			$checks['Passes event']            = array( self::pev(), array() );
+			$checks['Orders (passes event)']   = array( self::pev() . 'orders/', array( 'code' => 'XXXXX' ) );
+		}
+		$result = array();
+		foreach ( $checks as $label => $c ) {
+			$r = self::request( 'GET', $c[0], null, $c[1] );
+			if ( is_wp_error( $r ) ) {
+				$hint = '';
+				if ( 'fss_http_403' === $r->get_error_code() || 'fss_http_404' === $r->get_error_code() ) {
+					// Which organizer does this token actually belong to?
+					$orgs = self::request( 'GET', 'organizers/' );
+					if ( ! is_wp_error( $orgs ) ) {
+						$slugs = wp_list_pluck( isset( $orgs['results'] ) ? $orgs['results'] : array(), 'slug' );
+						$hint  = ' | The token belongs to organizer(s): ' . ( $slugs ? implode( ', ', $slugs ) : 'none' ) . ' (configured: ' . FSS_Pretix_Settings::get( 'organizer' ) . ')';
+					}
+				}
+				return new WP_Error( $r->get_error_code(), $label . ': ' . $r->get_error_message() . $hint, $r->get_error_data() );
+			}
+			$result[ $label ] = $r;
+		}
+		$result['event'] = $result['Lectures event'];
+		return $result;
+	}
+
+	/* ---------- customers ---------- */
+
+	public static function find_customer_by_email( $email ) {
+		$r = self::request( 'GET', self::org() . 'customers/', null, array( 'email' => $email ) );
+		if ( is_wp_error( $r ) ) {
+			return $r;
+		}
+		return ! empty( $r['results'] ) ? $r['results'][0] : null;
+	}
+
+	public static function create_customer( $email, $name_parts, $send_email = true ) {
+		return self::request( 'POST', self::org() . 'customers/', array(
+			'email'      => $email,
+			'name_parts' => $name_parts,
+			'locale'     => FSS_Pretix_Settings::get( 'locale' ),
+			'send_email' => (bool) $send_email,
+		) );
+	}
+
+	/* ---------- memberships ---------- */
+
+	public static function create_membership( $customer_id, $name_parts ) {
+		return self::request( 'POST', self::org() . 'memberships/', array(
+			'customer'            => $customer_id,
+			'membership_type'     => (int) FSS_Pretix_Settings::get( 'membership_type' ),
+			'date_start'          => FSS_Pretix_Settings::get( 'valid_from' ),
+			'date_end'            => FSS_Pretix_Settings::get( 'valid_until' ),
+			'attendee_name_parts' => $name_parts,
+			'testmode'            => FSS_Pretix_Settings::is_testmode(),
+		) );
+	}
+
+	public static function update_membership( $id, $data ) {
+		return self::request( 'PATCH', self::org() . 'memberships/' . (int) $id . '/', $data );
+	}
+
+	/**
+	 * Memberships cannot be deleted or canceled via the API ("You can change the date instead").
+	 * Moving date_end before date_start makes it invalid for every lecture.
+	 */
+	public static function revoke_membership( $id ) {
+		$start = new DateTime( FSS_Pretix_Settings::get( 'valid_from' ) );
+		$start->modify( '-1 second' );
+		return self::update_membership( $id, array( 'date_end' => $start->format( 'c' ) ) );
+	}
+
+	/* ---------- reusable media (the pass QR) ---------- */
+
+	public static function generate_identifier() {
+		// Same alphabet pretix uses for barcode media: no 0/O/1/I.
+		$chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+		$out   = '';
+		for ( $i = 0; $i < 16; $i++ ) {
+			$out .= $chars[ random_int( 0, strlen( $chars ) - 1 ) ];
+		}
+		return $out;
+	}
+
+	public static function create_medium( $label ) {
+		for ( $attempt = 0; $attempt < 3; $attempt++ ) {
+			$r = self::request( 'POST', self::org() . 'reusablemedia/', array(
+				'type'                   => 'barcode',
+				'identifier'             => self::generate_identifier(),
+				'active'                 => true,
+				'label'                  => mb_substr( $label, 0, 200 ),
+				'linked_orderpositions'  => array(),
+			) );
+			// Retry only on identifier collision.
+			if ( is_wp_error( $r ) ) {
+				$d = $r->get_error_data();
+				if ( isset( $d['body']['identifier'] ) ) {
+					continue;
+				}
+			}
+			return $r;
+		}
+		return $r;
+	}
+
+	public static function get_medium( $id ) {
+		return self::request( 'GET', self::org() . 'reusablemedia/' . (int) $id . '/' );
+	}
+
+	public static function update_medium( $id, $data ) {
+		return self::request( 'PATCH', self::org() . 'reusablemedia/' . (int) $id . '/', $data );
+	}
+
+	public static function find_media_by_customer( $customer_id ) {
+		$r = self::request( 'GET', self::org() . 'reusablemedia/', null, array(
+			'customer' => $customer_id,
+			'type'     => 'barcode',
+			'active'   => 'true',
+		) );
+		if ( is_wp_error( $r ) ) {
+			return $r;
+		}
+		return isset( $r['results'] ) ? $r['results'] : array();
+	}
+
+	/* ---------- lecture registrations (orders in the lectures event) ---------- */
+
+	private static function ev() {
+		return self::org() . 'events/' . rawurlencode( FSS_Pretix_Settings::get( 'talks_event' ) ) . '/';
+	}
+
+	public static function get_order( $event_slug, $code ) {
+		return self::request( 'GET', self::org() . 'events/' . rawurlencode( $event_slug ) . '/orders/' . rawurlencode( $code ) . '/', null, array( 'include_canceled_positions' => 'true' ) );
+	}
+
+	public static function list_orders( $query = array() ) {
+		return self::request( 'GET', self::ev() . 'orders/', null, $query );
+	}
+
+	/* ---------- pass tickets (orders in the passes event, used for badge printing) ---------- */
+
+	private static function pev() {
+		return self::org() . 'events/' . rawurlencode( FSS_Pretix_Settings::get( 'passes_event' ) ) . '/';
+	}
+
+	public static function create_pass_order( $email, $item_id, $name_parts, $comment ) {
+		return self::request( 'POST', self::pev() . 'orders/', array(
+			'email'      => $email,
+			'locale'     => FSS_Pretix_Settings::get( 'locale' ),
+			'status'     => 'p',
+			'testmode'   => FSS_Pretix_Settings::is_testmode(),
+			'send_email' => false,
+			'force'      => true,
+			'comment'    => $comment,
+			'positions'  => array(
+				array(
+					'item'                => (int) $item_id,
+					'attendee_name_parts' => $name_parts,
+					'attendee_email'      => $email,
+				),
+			),
+		) );
+	}
+
+	public static function update_pass_position( $position_id, $data ) {
+		return self::request( 'PATCH', self::pev() . 'orderpositions/' . (int) $position_id . '/', $data );
+	}
+
+	public static function cancel_pass_order( $code ) {
+		return self::request( 'POST', self::pev() . 'orders/' . rawurlencode( $code ) . '/mark_canceled/', array( 'send_email' => false ) );
+	}
+
+	public static function cancel_order( $code ) {
+		return self::request( 'POST', self::ev() . 'orders/' . rawurlencode( $code ) . '/mark_canceled/', array( 'send_email' => true ) );
+	}
+}
