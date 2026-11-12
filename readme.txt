@@ -38,7 +38,7 @@ Staff / pass only
   "All access (staff)" item of the lectures event). Each attendee then gets a free ticket of that item in the lectures
   event, linked straight to their pass. The item must be on the lecture check-in lists, otherwise the pass is not
   accepted at the rooms (pretix → lectures event → Check-in → every lecture list → Products).
-- CSV import (same page): header row with given_name, family_name, email (optional: title, team), separator ; or ,
+- CSV import (same page; "Download sample CSV" gives a template): header row with given_name, family_name, email (optional: title, team), separator ; or ,
   UTF-8 or Windows-1250. A preview shows every row (ok / duplicate / error) and nothing is created before you confirm.
   People already in the system are skipped (by email, or by name when there is no email). Max 300 rows, 20 per order.
 - Revoke cancels the pass ticket and the all-access ticket.

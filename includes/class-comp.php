@@ -27,6 +27,7 @@ class FSS_Pretix_Comp {
 		add_filter( 'wc_order_statuses', array( __CLASS__, 'add_status' ) );
 		add_action( 'admin_post_fss_pretix_comp', array( __CLASS__, 'handle' ) );
 		add_action( 'admin_post_fss_pretix_comp_csv', array( __CLASS__, 'handle_csv_preview' ) );
+		add_action( 'admin_post_fss_pretix_comp_csv_sample', array( __CLASS__, 'handle_csv_sample' ) );
 		add_action( 'admin_post_fss_pretix_comp_csv_confirm', array( __CLASS__, 'handle_csv_confirm' ) );
 	}
 
@@ -96,6 +97,7 @@ class FSS_Pretix_Comp {
 		echo '<p><button class="button button-primary" onclick="return confirm(\'Create complimentary tickets? Unless Pass only is ticked, the attendees are emailed.\')">Create complimentary tickets</button></p></form>';
 
 		echo '<h3>Import from CSV</h3>';
+		echo '<p><a class="button" href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=fss_pretix_comp_csv_sample' ), 'fss_pretix_comp_csv_sample' ) ) . '">Download sample CSV</a> <span class="description">Open it in Excel, replace the example rows with your people, save as CSV.</span></p>';
 		echo '<p>For many attendees at once. The file needs a header row with the columns <code>given_name</code>, <code>family_name</code>, <code>email</code>; optional: <code>title</code>, <code>team</code> (team name for the badge; overrides the field below). Separator <code>;</code> or <code>,</code>, UTF-8 or Windows-1250 (Excel). Nothing is created before you confirm the preview. People who are already in the system are skipped.</p>';
 		echo '<form method="post" enctype="multipart/form-data" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
 		wp_nonce_field( 'fss_pretix_comp_csv' );
@@ -242,6 +244,37 @@ class FSS_Pretix_Comp {
 	}
 
 	/* ---------- CSV import ---------- */
+
+	/** Example rows of the downloadable CSV template (fictional people; one without email, one with a title). */
+	public static function sample_rows() {
+		return array(
+			array( 'given_name', 'family_name', 'email', 'title', 'team' ),
+			array( 'Anna', 'Minta', 'anna.minta@example.com', '', 'STAFF' ),
+			array( 'Béla', 'Példa', '', '', 'STAFF' ),
+			array( 'Csilla', 'Teszt', 'csilla.teszt@example.com', 'Dr.', 'Organizers' ),
+		);
+	}
+
+	/**
+	 * Download: the template for the CSV import. ";" separated with a UTF-8 BOM, which is what Excel in a Hungarian
+	 * locale opens correctly and saves back without breaking the accents. The importer also reads "," and tab.
+	 */
+	public static function handle_csv_sample() {
+		if ( ! current_user_can( 'manage_woocommerce' ) ) {
+			wp_die( 'Forbidden' );
+		}
+		check_admin_referer( 'fss_pretix_comp_csv_sample' );
+		nocache_headers();
+		header( 'Content-Type: text/csv; charset=utf-8' );
+		header( 'Content-Disposition: attachment; filename=fss-attendees-sample.csv' );
+		$out = fopen( 'php://output', 'w' ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+		fwrite( $out, "\xEF\xBB\xBF" ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+		foreach ( self::sample_rows() as $row ) {
+			fputcsv( $out, $row, ';' ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+		}
+		fclose( $out ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+		exit;
+	}
 
 	/** Column header → canonical field name, tolerant to case, accents and common Hungarian/English variants. */
 	private static function canonical_column( $header ) {
