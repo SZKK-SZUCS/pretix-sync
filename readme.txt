@@ -30,5 +30,18 @@ Badge printing (optional, v1.2)
   name is picked up by "Re-run sync for all orders".
 - Name edits update the badge ticket; revoke/refund cancels it.
 
+Staff / pass only
+- Tools page → Complimentary tickets: tick "Pass only" → the pass (QR) and badge ticket are created, but NO emails are
+  sent, NO pretix account/membership is created and there is no lecture registration (also not after registration
+  opens). The email is optional. The pass is handed out at the venue after printing.
+- All access at the lectures: set Product → General → "pretix all-access item ID" (staff product, e.g. the
+  "All access (staff)" item of the lectures event). Each attendee then gets a free ticket of that item in the lectures
+  event, linked straight to their pass. The item must be on the lecture check-in lists, otherwise the pass is not
+  accepted at the rooms (pretix → lectures event → Check-in → every lecture list → Products).
+- CSV import (same page): header row with given_name, family_name, email (optional: title, team), separator ; or ,
+  UTF-8 or Windows-1250. A preview shows every row (ok / duplicate / error) and nothing is created before you confirm.
+  People already in the system are skipped (by email, or by name when there is no email). Max 300 rows, 20 per order.
+- Revoke cancels the pass ticket and the all-access ticket.
+
 Filters: fss_pretix_email_subject, fss_pretix_email_body ($value, $type, $attendee, $order)
 Logs: WooCommerce → Status → Logs, source "fss-pretix". Queue: Tools → Scheduled Actions, group "fss-pretix".

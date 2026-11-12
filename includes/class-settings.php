@@ -8,6 +8,7 @@ class FSS_Pretix_Settings {
 
 	const PRODUCT_META = '_fss_pretix_ticket';
 	const PASS_ITEM_META = '_fss_pretix_pass_item';
+	const ALL_ACCESS_ITEM_META = '_fss_pretix_all_access_item';
 
 	public static function init() {
 		add_filter( 'woocommerce_settings_tabs_array', array( __CLASS__, 'add_tab' ), 60 );
@@ -110,6 +111,18 @@ class FSS_Pretix_Settings {
 		return (int) get_post_meta( $id, self::PASS_ITEM_META, true );
 	}
 
+	/**
+	 * pretix item ID of the all-access ticket in the LECTURES event for a WooCommerce ticket product, or 0.
+	 * Set only on products whose holders may enter every lecture (staff).
+	 */
+	public static function all_access_item_for( $product ) {
+		if ( ! $product ) {
+			return 0;
+		}
+		$id = $product->is_type( 'variation' ) ? $product->get_parent_id() : $product->get_id();
+		return (int) get_post_meta( $id, self::ALL_ACCESS_ITEM_META, true );
+	}
+
 	public static function is_ticket_product( $product ) {
 		if ( ! $product ) {
 			return false;
@@ -172,6 +185,14 @@ class FSS_Pretix_Settings {
 			'desc_tip'          => true,
 			'description'       => 'ID of the matching pass product in the pretix passes event (badge printing). Leave empty if this ticket needs no badge.',
 		) );
+		woocommerce_wp_text_input( array(
+			'id'                => self::ALL_ACCESS_ITEM_META,
+			'label'             => 'pretix all-access item ID',
+			'type'              => 'number',
+			'custom_attributes' => array( 'min' => '1', 'step' => '1' ),
+			'desc_tip'          => true,
+			'description'       => 'Staff only. ID of the all-access product in the pretix LECTURES event. Each attendee gets a free ticket of it, linked to their pass, so the pass is accepted at every lecture (the product must be on the lecture check-in lists). Leave empty for normal tickets.',
+		) );
 		echo '</div>';
 	}
 
@@ -179,5 +200,7 @@ class FSS_Pretix_Settings {
 		$product->update_meta_data( self::PRODUCT_META, isset( $_POST[ self::PRODUCT_META ] ) ? 'yes' : 'no' ); // phpcs:ignore WordPress.Security.NonceVerification
 		$pass_item = isset( $_POST[ self::PASS_ITEM_META ] ) ? absint( $_POST[ self::PASS_ITEM_META ] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification
 		$product->update_meta_data( self::PASS_ITEM_META, $pass_item ? (string) $pass_item : '' );
+		$all_access = isset( $_POST[ self::ALL_ACCESS_ITEM_META ] ) ? absint( $_POST[ self::ALL_ACCESS_ITEM_META ] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification
+		$product->update_meta_data( self::ALL_ACCESS_ITEM_META, $all_access ? (string) $all_access : '' );
 	}
 }

@@ -220,27 +220,56 @@ class FSS_Pretix_API {
 	}
 
 	/**
+	 * Body of a free, paid, silent order with one position (pass ticket / all-access ticket).
+	 *
+	 * The email keys are left out when there is no address: pass-only attendees (e.g. staff) may have none, and
+	 * pretix documents both as optional. send_email is always false - pretix must never mail these orders.
+	 *
 	 * @param string $company Team name; pretix prints it on the badge via the "Attendee company" element.
 	 */
-	public static function create_pass_order( $email, $item_id, $name_parts, $comment, $company = '' ) {
+	private static function free_order_body( $email, $item_id, $name_parts, $comment, $company ) {
 		$position = array(
 			'item'                => (int) $item_id,
 			'attendee_name_parts' => $name_parts,
-			'attendee_email'      => $email,
 		);
-		if ( '' !== $company ) {
-			$position['company'] = $company;
-		}
-		return self::request( 'POST', self::pev() . 'orders/', array(
-			'email'      => $email,
+		$body     = array(
 			'locale'     => FSS_Pretix_Settings::get( 'locale' ),
 			'status'     => 'p',
 			'testmode'   => FSS_Pretix_Settings::is_testmode(),
 			'send_email' => false,
 			'force'      => true,
 			'comment'    => $comment,
-			'positions'  => array( $position ),
-		) );
+		);
+		if ( '' !== $email ) {
+			$position['attendee_email'] = $email;
+			$body['email']              = $email;
+		}
+		if ( '' !== $company ) {
+			$position['company'] = $company;
+		}
+		$body['positions'] = array( $position );
+		return $body;
+	}
+
+	public static function create_pass_order( $email, $item_id, $name_parts, $comment, $company = '' ) {
+		return self::request( 'POST', self::pev() . 'orders/', self::free_order_body( $email, $item_id, $name_parts, $comment, $company ) );
+	}
+
+	/**
+	 * All-access ticket in the LECTURES event (e.g. staff). It is not bought in the shop: the item is voucher-only
+	 * and has no sales channel, and the order API does not check either. It carries no customer account; the plugin
+	 * links its position to the attendee's pass directly, so the pass is accepted on the lecture check-in lists.
+	 */
+	public static function create_all_access_order( $email, $item_id, $name_parts, $comment, $company = '' ) {
+		return self::request( 'POST', self::ev() . 'orders/', self::free_order_body( $email, $item_id, $name_parts, $comment, $company ) );
+	}
+
+	public static function update_all_access_position( $position_id, $data ) {
+		return self::request( 'PATCH', self::ev() . 'orderpositions/' . (int) $position_id . '/', $data );
+	}
+
+	public static function cancel_all_access_order( $code ) {
+		return self::request( 'POST', self::ev() . 'orders/' . rawurlencode( $code ) . '/mark_canceled/', array( 'send_email' => false ) );
 	}
 
 	public static function update_pass_position( $position_id, $data ) {

@@ -80,7 +80,8 @@ class FSS_Pretix_Sync {
 		}
 
 		if ( $done ) {
-			$order->add_order_note( sprintf( 'pretix: %s synced (%s): %s', $open ? 'pass + lecture registration' : 'pass', count( $done ), implode( ', ', $done ) ) );
+			$what = FSS_Pretix_Attendees::is_pass_only( $order ) ? 'pass only' : ( $open ? 'pass + lecture registration' : 'pass' );
+			$order->add_order_note( sprintf( 'pretix: %s synced (%s): %s', $what, count( $done ), implode( ', ', $done ) ) );
 		}
 		if ( $errors ) {
 			$order->add_order_note( "pretix sync ERROR:\n" . implode( "\n", $errors ) );
@@ -129,6 +130,20 @@ class FSS_Pretix_Sync {
 		$err = self::sync_pass_ticket( $order, $item, $a, $save );
 		if ( $err ) {
 			return $fail( $err );
+		}
+
+		// Phase 1c: free all-access ticket in the lectures event (staff), linked to the pass.
+		$err = self::sync_all_access_ticket( $order, $item, $a, $save );
+		if ( $err ) {
+			return $fail( $err );
+		}
+
+		// Pass-only attendees (e.g. staff who get their pass handed over at the venue) stop here on purpose: no
+		// email, no pretix account, no membership, no lecture registration - also after registration opens.
+		if ( FSS_Pretix_Attendees::is_pass_only( $order ) ) {
+			$a['status'] = 'passonly';
+			$save();
+			return null;
 		}
 
 		if ( ! $open ) {
@@ -207,7 +222,7 @@ class FSS_Pretix_Sync {
 
 		if ( empty( $a['pass_order'] ) ) {
 			$o = FSS_Pretix_API::create_pass_order(
-				$a['email'],
+				isset( $a['email'] ) ? $a['email'] : '',
 				$pass_item,
 				FSS_Pretix_Attendees::name_parts( $a ),
 				'WooCommerce #' . $order->get_order_number() . ' – ' . $item->get_name(),
@@ -234,6 +249,48 @@ class FSS_Pretix_Sync {
 		// Runs for new and existing passes alike, so "Re-run sync for all orders" fills in the team name on passes
 		// created before this field was sent, and picks up later edits of the order's team name.
 		return self::sync_pass_company( $a, $team, $save );
+	}
+
+	/**
+	 * Staff: a free all-access ticket in the lectures event, linked straight to the attendee's pass. The lecture
+	 * check-in lists then accept the pass at every lecture. Only for products with an all-access item ID set.
+	 * It needs no pretix account: the link is made here, not by the webhook (which works through the account).
+	 *
+	 * @return WP_Error|null
+	 */
+	private static function sync_all_access_ticket( $order, $item, &$a, $save ) {
+		if ( empty( $a['medium_id'] ) ) {
+			return null;
+		}
+		$all_access = FSS_Pretix_Settings::all_access_item_for( $item->get_product() );
+		if ( ! $all_access ) {
+			return null;
+		}
+
+		if ( empty( $a['all_access_order'] ) ) {
+			$o = FSS_Pretix_API::create_all_access_order(
+				isset( $a['email'] ) ? $a['email'] : '',
+				$all_access,
+				FSS_Pretix_Attendees::name_parts( $a ),
+				'WooCommerce #' . $order->get_order_number() . ' – ' . $item->get_name() . ' (all access)'
+			);
+			if ( is_wp_error( $o ) ) {
+				return $o;
+			}
+			$a['all_access_order']    = $o['code'];
+			$a['all_access_position'] = (int) $o['positions'][0]['id'];
+			$save();
+		}
+
+		if ( empty( $a['all_access_linked'] ) ) {
+			$r = FSS_Pretix_Webhook::update_links( $a['medium_id'], array(), array( $a['all_access_position'] ) );
+			if ( is_wp_error( $r ) ) {
+				return $r;
+			}
+			$a['all_access_linked'] = 1;
+			$save();
+		}
+		return null;
 	}
 
 	/**
@@ -364,6 +421,21 @@ class FSS_Pretix_Sync {
 			$save();
 		}
 
+		// 3b. All-access ticket in the lectures event (staff).
+		if ( ! empty( $a['all_access_order'] ) && empty( $a['all_access_canceled'] ) ) {
+			$r = FSS_Pretix_API::cancel_all_access_order( $a['all_access_order'] );
+			if ( is_wp_error( $r ) ) {
+				$d = $r->get_error_data();
+				if ( ! isset( $d['status'] ) || 400 !== (int) $d['status'] ) { // 400 = already canceled
+					$a['error'] = $r->get_error_message();
+					$save();
+					return $r;
+				}
+			}
+			$a['all_access_canceled'] = 1;
+			$save();
+		}
+
 		// 4. Pass.
 		if ( ! empty( $a['medium_id'] ) && empty( $a['medium_revoked'] ) ) {
 			$r = FSS_Pretix_API::update_medium( $a['medium_id'], array( 'active' => false, 'linked_orderpositions' => array() ) );
@@ -414,7 +486,22 @@ class FSS_Pretix_Sync {
 		$list = $item->get_meta( FSS_Pretix_Attendees::ITEM_META );
 		$a    = $list[ $index ];
 
-		if ( strtolower( $new['email'] ) !== strtolower( $a['email'] ) ) {
+		$old_email = isset( $a['email'] ) ? $a['email'] : '';
+
+		// Pass-only attendees have no account and may have no email at all: adding or changing it must not replace
+		// the person (a new email would otherwise mean a new pass). Only the stored address is updated.
+		if ( FSS_Pretix_Attendees::is_pass_only( $order ) && strtolower( $new['email'] ) !== strtolower( $old_email ) ) {
+			$a['email'] = strtolower( $new['email'] );
+			if ( '' !== $a['email'] && ! empty( $a['pass_position'] ) && empty( $a['pass_canceled'] ) ) {
+				$r = FSS_Pretix_API::update_pass_position( $a['pass_position'], array( 'attendee_email' => $a['email'] ) );
+				if ( is_wp_error( $r ) ) {
+					return $r;
+				}
+			}
+			$old_email = $a['email'];
+		}
+
+		if ( strtolower( $new['email'] ) !== strtolower( $old_email ) ) {
 			if ( ! isset( $a['status'] ) || 'revoked' !== $a['status'] ) {
 				$err = self::revoke_attendee( $order, $item, $index, $a );
 				if ( $err ) {
@@ -454,6 +541,12 @@ class FSS_Pretix_Sync {
 		}
 		if ( ! empty( $a['pass_position'] ) && empty( $a['pass_canceled'] ) ) {
 			$r = FSS_Pretix_API::update_pass_position( $a['pass_position'], array( 'attendee_name_parts' => FSS_Pretix_Attendees::name_parts( $a ) ) );
+			if ( is_wp_error( $r ) ) {
+				return $r;
+			}
+		}
+		if ( ! empty( $a['all_access_position'] ) && empty( $a['all_access_canceled'] ) ) {
+			$r = FSS_Pretix_API::update_all_access_position( $a['all_access_position'], array( 'attendee_name_parts' => FSS_Pretix_Attendees::name_parts( $a ) ) );
 			if ( is_wp_error( $r ) ) {
 				return $r;
 			}
