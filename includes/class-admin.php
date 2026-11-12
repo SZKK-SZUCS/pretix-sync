@@ -39,7 +39,7 @@ class FSS_Pretix_Admin {
 	/* ---------- tools page ---------- */
 
 	private static function stats() {
-		$s = array( 'orders' => 0, 'attendees' => 0, 'new' => 0, 'pass' => 0, 'registered' => 0, 'revoked' => 0, 'error' => 0 );
+		$s = array( 'orders' => 0, 'attendees' => 0, 'new' => 0, 'pass' => 0, 'passonly' => 0, 'registered' => 0, 'revoked' => 0, 'error' => 0 );
 		foreach ( FSS_Pretix_Attendees::order_ids() as $oid ) {
 			$o = wc_get_order( $oid );
 			if ( ! $o ) {
@@ -73,6 +73,7 @@ class FSS_Pretix_Admin {
 		echo '<tr><td>Attendees</td><td>' . (int) $s['attendees'] . '</td></tr>';
 		echo '<tr><td>… pass created (waiting for registration opening)</td><td>' . (int) $s['pass'] . '</td></tr>';
 		echo '<tr><td>… pass + lecture registration right</td><td>' . (int) $s['registered'] . '</td></tr>';
+		echo '<tr><td>… pass only (no emails, no account – e.g. staff)</td><td>' . (int) $s['passonly'] . '</td></tr>';
 		echo '<tr><td>… not synced yet</td><td>' . (int) $s['new'] . '</td></tr>';
 		echo '<tr><td>… error</td><td>' . ( $s['error'] ? '<strong style="color:#d63638">' . (int) $s['error'] . '</strong>' : '0' ) . '</td></tr>';
 		echo '<tr><td>… revoked</td><td>' . (int) $s['revoked'] . '</td></tr>';
@@ -174,7 +175,7 @@ class FSS_Pretix_Admin {
 					isset( $a['title'] ) ? $a['title'] : '',
 					$a['given_name'],
 					$a['family_name'],
-					$a['email'],
+					isset( $a['email'] ) ? $a['email'] : '',
 					isset( $a['medium_identifier'] ) && ( ! isset( $a['status'] ) || 'revoked' !== $a['status'] ) ? $a['medium_identifier'] : '',
 					isset( $a['pass_order'] ) && empty( $a['pass_canceled'] ) ? $a['pass_order'] : '',
 					isset( $a['status'] ) ? $a['status'] : 'new',
@@ -205,7 +206,7 @@ class FSS_Pretix_Admin {
 			echo '<p>No FSS attendees on this order.</p>';
 			return;
 		}
-		$colors = array( 'new' => '#996800', 'pass' => '#2271b1', 'registered' => '#008a20', 'revoked' => '#8c8f94', 'error' => '#d63638' );
+		$colors = array( 'new' => '#996800', 'pass' => '#2271b1', 'passonly' => '#50575e', 'registered' => '#008a20', 'revoked' => '#8c8f94', 'error' => '#d63638' );
 		echo '<table class="widefat striped"><thead><tr><th>Ticket</th><th>Title</th><th>Given name</th><th>Family name</th><th>Email</th><th>Pass QR</th><th>Status</th><th></th></tr></thead><tbody>';
 		foreach ( $rows as $row ) {
 			$a   = $row['data'];
@@ -218,7 +219,7 @@ class FSS_Pretix_Admin {
 			echo '<td><input type="text" name="' . $f . '[title]" value="' . esc_attr( isset( $a['title'] ) ? $a['title'] : '' ) . '" style="width:60px"' . $dis . '></td>';
 			echo '<td><input type="text" name="' . $f . '[given_name]" value="' . esc_attr( $a['given_name'] ) . '"' . $dis . '></td>';
 			echo '<td><input type="text" name="' . $f . '[family_name]" value="' . esc_attr( $a['family_name'] ) . '"' . $dis . '></td>';
-			echo '<td><input type="email" name="' . $f . '[email]" value="' . esc_attr( $a['email'] ) . '"' . $dis . '></td>';
+			echo '<td><input type="email" name="' . $f . '[email]" value="' . esc_attr( isset( $a['email'] ) ? $a['email'] : '' ) . '"' . $dis . '></td>';
 			echo '<td><code>' . esc_html( isset( $a['medium_identifier'] ) ? $a['medium_identifier'] : '–' ) . '</code>';
 			if ( ! empty( $a['pass_order'] ) ) {
 				echo '<br><small>badge ticket ' . esc_html( $a['pass_order'] ) . ( ! empty( $a['pass_canceled'] ) ? ' (canceled)' : '' ) . '</small>';
@@ -281,7 +282,9 @@ class FSS_Pretix_Admin {
 				'family_name' => sanitize_text_field( isset( $in['family_name'] ) ? $in['family_name'] : '' ),
 				'email'       => sanitize_email( isset( $in['email'] ) ? $in['email'] : '' ),
 			);
-			if ( ! $new['given_name'] || ! $new['family_name'] || ! is_email( $new['email'] ) ) {
+			// Pass-only attendees (staff) may have no email; every other attendee needs one.
+			$email_ok = FSS_Pretix_Attendees::is_pass_only( $order ) ? ( '' === $new['email'] || is_email( $new['email'] ) ) : is_email( $new['email'] );
+			if ( ! $new['given_name'] || ! $new['family_name'] || ! $email_ok ) {
 				$order->add_order_note( "pretix: attendee $name NOT changed – name and a valid email are required." );
 				return;
 			}
