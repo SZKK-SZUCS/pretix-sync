@@ -481,7 +481,9 @@ class FSS_Pretix_Comp {
 		}
 
 		$rows  = self::validate_rows( $parsed['rows'], $pass_only, $team, self::existing_index() );
-		$token = wp_generate_password( 20, false );
+		// Kisbetűs, mert a betöltés sanitize_key()-t használ, az pedig kisbetűsít: vegyes kis/nagybetűs tokennél a keresett
+		// transient kulcs sosem egyezne a mentettel ("preview expired").
+		$token = strtolower( wp_generate_password( 20, false ) );
 		set_transient( 'fss_pretix_csv_' . $token, array(
 			'user'       => get_current_user_id(),
 			'product_id' => $product->get_id(),
