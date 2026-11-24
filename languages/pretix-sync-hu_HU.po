@@ -1,0 +1,96 @@
+# Hungarian translation of Pretix Sync.
+msgid ""
+msgstr ""
+"Project-Id-Version: Pretix Sync\n"
+"Language: hu_HU\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid " (booked by %s)"
+msgstr " (foglalta: %s)"
+
+msgid "%1$s: this email address is already used for %2$s. Every attendee needs their own email address."
+msgstr "%1$s: ezt az e-mail-címet már használja: %2$s. Minden résztvevőnek saját e-mail-címe kell legyen."
+
+msgid "%s: please enter a valid email address."
+msgstr "%s: kérjük, adjon meg érvényes e-mail-címet."
+
+msgid "%s: please enter the given name and family name."
+msgstr "%s: kérjük, adja meg a vezetéknevet és a keresztnevet."
+
+msgid "<p>Hello {name},</p>\n<p>Registration for the sessions of <strong>{event_name}</strong> is now open. Seats are limited, so register early:</p>\n<p><a href=\"{register_url}\" style=\"font-weight:bold\">Register for sessions</a></p>\n{account_note}\n<p>Your personal <strong>event pass</strong> with your QR code will be handed out at the venue. Wear it at all times – it is your entry to the event.</p>\n<p>See you at {event_name}!</p>"
+msgstr "<p>Kedves {name}!</p>\n<p>Megnyílt a(z) <strong>{event_name}</strong> programjaira a regisztráció. A férőhelyek száma korlátozott, ezért érdemes minél előbb regisztrálni:</p>\n<p><a href=\"{register_url}\" style=\"font-weight:bold\">Regisztráció a programokra</a></p>\n{account_note}\n<p>Személyre szóló <strong>belépőkártyáját</strong> a QR-kódjával a helyszínen adjuk át. Viselje végig a rendezvény alatt – ez az Ön belépője.</p>\n<p>Találkozunk a(z) {event_name} rendezvényen!</p>"
+
+msgid "<p>Hello {name},</p>\n<p>You have a ticket for <strong>{event_name}</strong>{buyer_note}.</p>\n<p>Seats at the sessions are limited, so please register for the sessions you want to attend:</p>\n<p><a href=\"{register_url}\" style=\"font-weight:bold\">Register for sessions</a></p>\n{account_note}\n<p>Your personal <strong>event pass</strong> with your QR code will be handed out at the venue. Wear it at all times – it is your entry to the event.</p>\n<p>See you at {event_name}!</p>"
+msgstr "<p>Kedves {name}!</p>\n<p>Jegye van a(z) <strong>{event_name}</strong> rendezvényre{buyer_note}.</p>\n<p>A programokon korlátozott a férőhelyek száma, ezért kérjük, regisztráljon azokra, amelyeken részt kíván venni:</p>\n<p><a href=\"{register_url}\" style=\"font-weight:bold\">Regisztráció a programokra</a></p>\n{account_note}\n<p>Személyre szóló <strong>belépőkártyáját</strong> a QR-kódjával a helyszínen adjuk át. Viselje végig a rendezvény alatt – ez az Ön belépője.</p>\n<p>Találkozunk a(z) {event_name} rendezvényen!</p>"
+
+msgid "<p>Hello {name},</p>\n<p>You have a ticket for <strong>{event_name}</strong>{buyer_note}.</p>\n{registration_note}\n<p>Your personal <strong>event pass</strong> with your QR code will be handed out at the venue. Wear it at all times – it is your entry to the event.</p>\n<p>See you at {event_name}!</p>"
+msgstr "<p>Kedves {name}!</p>\n<p>Jegye van a(z) <strong>{event_name}</strong> rendezvényre{buyer_note}.</p>\n{registration_note}\n<p>Személyre szóló <strong>belépőkártyáját</strong> a QR-kódjával a helyszínen adjuk át. Viselje végig a rendezvény alatt – ez az Ön belépője.</p>\n<p>Találkozunk a(z) {event_name} rendezvényen!</p>"
+
+msgid "<p>Log in with your existing account for this email address. Forgot your password? Reset it here: <a href=\"%1$s\">%1$s</a></p>"
+msgstr "<p>Jelentkezzen be a meglévő fiókjával, amely ehhez az e-mail-címhez tartozik. Elfelejtette a jelszavát? Itt állíthatja vissza: <a href=\"%1$s\">%1$s</a></p>"
+
+msgid "<p>Seats at the sessions are limited, so you need to register for the sessions you want to attend. <strong>Session registration is not open yet</strong> – we will send you an email as soon as it opens.</p>"
+msgstr "<p>A programokon korlátozott a férőhelyek száma, ezért regisztrálnia kell azokra, amelyeken részt kíván venni. <strong>A regisztráció még nem nyílt meg</strong> – e-mailben értesítjük, amint megnyílik.</p>"
+
+msgid "<p>We have created an account for you with this email address. You will receive a separate email with a link to <strong>set your password</strong> (the link is valid for one day). If it has expired, you can set your password here at any time: <a href=\"%1$s\">%1$s</a></p>"
+msgstr "<p>Fiókot hoztunk létre Önnek ezzel az e-mail-címmel. Külön e-mailben kap egy hivatkozást, amellyel <strong>beállíthatja a jelszavát</strong> (a hivatkozás egy napig érvényes). Ha lejárt, a jelszót bármikor beállíthatja itt: <a href=\"%1$s\">%1$s</a></p>"
+
+msgid "Attendee %1$d – %2$s"
+msgstr "%1$d. résztvevő – %2$s"
+
+msgid "Attendee %d"
+msgstr "%d. résztvevő"
+
+msgid "Attendee details"
+msgstr "Résztvevők adatai"
+
+msgid "Attendees:"
+msgstr "Résztvevők:"
+
+msgid "Email address"
+msgstr "E-mail-cím"
+
+msgid "Family name"
+msgstr "Vezetéknév"
+
+msgid "Given name"
+msgstr "Keresztnév"
+
+msgid "Please enter the details of each attendee. Every attendee receives their own email with their pass and the session registration link."
+msgstr "Kérjük, adja meg minden résztvevő adatait. Minden résztvevő külön e-mailt kap a belépőjével és a programregisztráció hivatkozásával."
+
+msgid "Please enter the details of each attendee. Every attendee receives their own email with their pass."
+msgstr "Kérjük, adja meg minden résztvevő adatait. Minden résztvevő külön e-mailt kap a belépőjével."
+
+msgid "Session registration is now open – {event_name}"
+msgstr "Megnyílt a programregisztráció – {event_name}"
+
+msgid "Session registration is open"
+msgstr "Megnyílt a programregisztráció"
+
+msgid "Session registration opened (sent to everyone who already has a ticket)"
+msgstr "Megnyílt a programregisztráció (minden meglévő jegytulajdonosnak)"
+
+msgid "Ticket bought while session registration is already open"
+msgstr "Jegyvásárlás nyitott programregisztráció mellett"
+
+msgid "Ticket confirmed (session registration not open yet, or sessions module off)"
+msgstr "Jegy visszaigazolása (a programregisztráció még nem nyílt meg, vagy a modul ki van kapcsolva)"
+
+msgid "Title"
+msgstr "Titulus"
+
+msgid "Your ticket is confirmed"
+msgstr "Jegye visszaigazolva"
+
+msgid "Your {event_name} ticket"
+msgstr "Az Ön {event_name} jegye"
+
+msgid "Your {event_name} ticket – register for sessions"
+msgstr "Az Ön {event_name} jegye – regisztráljon a programokra"
+
+msgid "e.g. Dr."
+msgstr "pl. Dr."

@@ -4,24 +4,24 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Attendee storage.
  *
- * Attendees live on the order line item as meta "_fss_attendees": a list of arrays with
+ * Attendees live on the order line item as meta "_pretix_sync_attendees": a list of arrays with
  *   title, given_name, family_name, email            – entered at checkout
  *   medium_id, medium_identifier                      – phase 1 (pass QR)
  *   pass_order, pass_position, pass_linked, pass_company – badge ticket in the passes event; pass_company is the
  *                                                       team name last written to it (to detect changes)
- *   customer_id, customer_new, membership_id          – phase 2 (lecture registration right)
+ *   customer_id, customer_new, membership_id          – phase 2 (session registration right)
  *   all_access_order, all_access_position, all_access_linked, all_access_canceled
- *                                                     – free all-access ticket in the lectures event (staff), linked to the pass
+ *                                                     – free all-access ticket in the sessions event (staff), linked to the pass
  *   status: new | pass | passonly | registered | revoked | error   (passonly = finished pass-only attendee)
  *   error                                             – last error message
  */
-class FSS_Pretix_Attendees {
+class Pretix_Sync_Attendees {
 
-	const ITEM_META  = '_fss_attendees';
-	const ORDER_FLAG = '_fss_pretix_has_attendees';
+	const ITEM_META  = '_pretix_sync_attendees';
+	const ORDER_FLAG = '_pretix_sync_has_attendees';
 
-	/** Order flag: "pass only" – pass and badge ticket only; no emails, no pretix account, no lecture registration. */
-	const PASS_ONLY_META = '_fss_pass_only';
+	/** Order flag: "pass only" – pass and badge ticket only; no emails, no pretix account, no session registration. */
+	const PASS_ONLY_META = '_pretix_sync_pass_only';
 
 	public static function is_pass_only( $order ) {
 		return 'yes' === $order->get_meta( self::PASS_ONLY_META );
@@ -91,7 +91,7 @@ class FSS_Pretix_Attendees {
 	}
 
 	/** All order IDs that carry attendees. */
-	public static function order_ids( $statuses = array( 'processing', 'completed', 'fss-comp' ) ) {
+	public static function order_ids( $statuses = array( 'processing', 'completed', 'pretix-sync-comp' ) ) {
 		return wc_get_orders( array(
 			'limit'      => -1,
 			'status'     => $statuses,

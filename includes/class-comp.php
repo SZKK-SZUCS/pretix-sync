@@ -4,17 +4,17 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Complimentary (free) tickets – e.g. competition winners, guests, speakers, staff.
  *
- * Creates a WooCommerce order with the custom status "Complimentary" (wc-fss-comp). Invoicing plugins and
+ * Creates a WooCommerce order with the custom status "Complimentary" (wc-pretix-sync-comp). Invoicing plugins and
  * WooCommerce customer emails react to processing/completed, not to this status, so no (0 Ft) invoice is issued.
- * The attendees are synced to pretix exactly like paid ones (pass + lecture registration right) - unless the
+ * The attendees are synced to pretix exactly like paid ones (pass + session registration right) - unless the
  * "Pass only" option is ticked: then only the pass and badge ticket are created (no emails, no pretix account,
- * no lecture registration), e.g. for staff whose pass is handed over at the venue.
+ * no session registration), e.g. for staff whose pass is handed over at the venue.
  *
  * Attendees are entered in the grid (up to 5) or imported from a CSV file (preview first, then confirm).
  */
-class FSS_Pretix_Comp {
+class Pretix_Sync_Comp {
 
-	const STATUS = 'fss-comp';
+	const STATUS = 'pretix-sync-comp';
 
 	/** Attendees per WooCommerce order when importing: keeps each background sync job short. */
 	const CHUNK = 20;
@@ -25,10 +25,13 @@ class FSS_Pretix_Comp {
 	public static function init() {
 		add_action( 'init', array( __CLASS__, 'register_status' ) );
 		add_filter( 'wc_order_statuses', array( __CLASS__, 'add_status' ) );
-		add_action( 'admin_post_fss_pretix_comp', array( __CLASS__, 'handle' ) );
-		add_action( 'admin_post_fss_pretix_comp_csv', array( __CLASS__, 'handle_csv_preview' ) );
-		add_action( 'admin_post_fss_pretix_comp_csv_sample', array( __CLASS__, 'handle_csv_sample' ) );
-		add_action( 'admin_post_fss_pretix_comp_csv_confirm', array( __CLASS__, 'handle_csv_confirm' ) );
+		if ( ! Pretix_Sync_Settings::staff_enabled() ) {
+			return; // status stays registered so existing complimentary orders keep their label
+		}
+		add_action( 'admin_post_pretix_sync_comp', array( __CLASS__, 'handle' ) );
+		add_action( 'admin_post_pretix_sync_comp_csv', array( __CLASS__, 'handle_csv_preview' ) );
+		add_action( 'admin_post_pretix_sync_comp_csv_sample', array( __CLASS__, 'handle_csv_sample' ) );
+		add_action( 'admin_post_pretix_sync_comp_csv_confirm', array( __CLASS__, 'handle_csv_confirm' ) );
 	}
 
 	public static function register_status() {
@@ -53,7 +56,9 @@ class FSS_Pretix_Comp {
 	private static function ticket_products() {
 		return array_filter(
 			wc_get_products( array( 'limit' => -1, 'status' => array( 'publish', 'private' ) ) ),
-			array( 'FSS_Pretix_Settings', 'is_ticket_product' )
+			function ( $p ) {
+				return Pretix_Sync_Settings::is_ticket_product( $p ) && ! Pretix_Sync_I18n::is_translation( $p->get_id() );
+			}
 		);
 	}
 
@@ -66,7 +71,7 @@ class FSS_Pretix_Comp {
 	}
 
 	private static function pass_only_checkbox() {
-		return '<label><input type="checkbox" name="pass_only" value="1"> <strong>Pass only</strong> – no emails, no pretix account, no lecture registration (e.g. staff whose pass is handed out at the venue). Email is optional.</label>';
+		return '<label><input type="checkbox" name="pass_only" value="1"> <strong>Pass only</strong> – no emails, no pretix account, no session registration (e.g. staff whose pass is handed out at the venue). Email is optional.</label>';
 	}
 
 	public static function render_form() {
@@ -77,13 +82,14 @@ class FSS_Pretix_Comp {
 		echo '<h2>Complimentary tickets</h2>';
 		echo '<p>For winners, guests, speakers, staff etc. Creates an order with status <strong>Complimentary</strong> – no payment, no invoice, no WooCommerce customer email. Attendees get the same pass and emails as paying attendees, unless <em>Pass only</em> is ticked.</p>';
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
-		wp_nonce_field( 'fss_pretix_comp' );
-		echo '<input type="hidden" name="action" value="fss_pretix_comp">';
+		wp_nonce_field( 'pretix_sync_comp' );
+		echo '<input type="hidden" name="action" value="pretix_sync_comp">';
 		echo '<table class="form-table" style="max-width:900px"><tr><th>Ticket type</th><td>';
 		self::product_select( $products );
 		echo '</td></tr>';
 		echo '<tr><th>Reason / note</th><td><input type="text" name="note" style="width:100%" placeholder="e.g. Competition winner – LinkedIn giveaway" required></td></tr>';
 		echo '<tr><th>Team name</th><td><input type="text" name="team_name" style="width:100%" placeholder="Printed on the badge (optional)"></td></tr>';
+		echo self::lang_row(); // phpcs:ignore WordPress.Security.EscapeOutput
 		echo '<tr><th>Pass only</th><td>' . self::pass_only_checkbox() . '</td></tr></table>'; // phpcs:ignore WordPress.Security.EscapeOutput
 		echo '<table class="widefat striped" style="max-width:900px"><thead><tr><th>#</th><th>Title</th><th>Given name *</th><th>Family name *</th><th>Email *</th></tr></thead><tbody>';
 		for ( $i = 0; $i < 5; $i++ ) {
@@ -97,20 +103,39 @@ class FSS_Pretix_Comp {
 		echo '<p><button class="button button-primary" onclick="return confirm(\'Create complimentary tickets? Unless Pass only is ticked, the attendees are emailed.\')">Create complimentary tickets</button></p></form>';
 
 		echo '<h3>Import from CSV</h3>';
-		echo '<p><a class="button" href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=fss_pretix_comp_csv_sample' ), 'fss_pretix_comp_csv_sample' ) ) . '">Download sample CSV</a> <span class="description">Open it in Excel, replace the example rows with your people, save as CSV.</span></p>';
+		echo '<p><a class="button" href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=pretix_sync_comp_csv_sample' ), 'pretix_sync_comp_csv_sample' ) ) . '">Download sample CSV</a> <span class="description">Open it in Excel, replace the example rows with your people, save as CSV.</span></p>';
 		echo '<p>For many attendees at once. The file needs a header row with the columns <code>given_name</code>, <code>family_name</code>, <code>email</code>; optional: <code>title</code>, <code>team</code> (team name for the badge; overrides the field below). Separator <code>;</code> or <code>,</code>, UTF-8 or Windows-1250 (Excel). Nothing is created before you confirm the preview. People who are already in the system are skipped.</p>';
 		echo '<form method="post" enctype="multipart/form-data" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
-		wp_nonce_field( 'fss_pretix_comp_csv' );
-		echo '<input type="hidden" name="action" value="fss_pretix_comp_csv">';
+		wp_nonce_field( 'pretix_sync_comp_csv' );
+		echo '<input type="hidden" name="action" value="pretix_sync_comp_csv">';
 		echo '<table class="form-table" style="max-width:900px"><tr><th>Ticket type</th><td>';
 		self::product_select( $products );
 		echo '</td></tr>';
-		echo '<tr><th>Reason / note</th><td><input type="text" name="note" style="width:100%" placeholder="e.g. Staff 2026" required></td></tr>';
+		echo '<tr><th>Reason / note</th><td><input type="text" name="note" style="width:100%" placeholder="e.g. Staff" required></td></tr>';
 		echo '<tr><th>Team name</th><td><input type="text" name="team_name" style="width:100%" placeholder="Default for rows without a team column (optional)"></td></tr>';
+		echo self::lang_row(); // phpcs:ignore WordPress.Security.EscapeOutput
 		echo '<tr><th>Pass only</th><td>' . self::pass_only_checkbox() . '</td></tr>'; // phpcs:ignore WordPress.Security.EscapeOutput
 		echo '<tr><th>CSV file</th><td><input type="file" name="csv_file" accept=".csv,.txt,text/csv"></td></tr>';
 		echo '<tr><th>…or paste</th><td><textarea name="csv_text" rows="6" style="width:100%;font-family:monospace" placeholder="given_name;family_name;email&#10;Anna;Kovács;"></textarea></td></tr></table>';
 		echo '<p><button class="button">Preview import</button></p></form>';
+	}
+
+	/** Table row to pick the language of the attendee emails (only with Polylang). */
+	private static function lang_row() {
+		$languages = Pretix_Sync_I18n::languages();
+		if ( ! $languages ) {
+			return '';
+		}
+		$html = '<tr><th>Email language</th><td><select name="lang">';
+		foreach ( $languages as $slug => $l ) {
+			$html .= '<option value="' . esc_attr( $slug ) . '"' . selected( $slug, Pretix_Sync_I18n::default_lang(), false ) . '>' . esc_html( $l['name'] ) . '</option>';
+		}
+		return $html . '</select></td></tr>';
+	}
+
+	private static function posted_lang() {
+		$lang = isset( $_POST['lang'] ) ? sanitize_key( wp_unslash( $_POST['lang'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
+		return array_key_exists( $lang, Pretix_Sync_I18n::languages() ) ? $lang : '';
 	}
 
 	/* ---------- shared helpers ---------- */
@@ -125,12 +150,12 @@ class FSS_Pretix_Comp {
 	 */
 	private static function existing_index() {
 		$idx = array( 'email' => array(), 'name' => array() );
-		foreach ( FSS_Pretix_Attendees::order_ids() as $oid ) {
+		foreach ( Pretix_Sync_Attendees::order_ids() as $oid ) {
 			$o = wc_get_order( $oid );
 			if ( ! $o ) {
 				continue;
 			}
-			foreach ( FSS_Pretix_Attendees::for_order( $o ) as $row ) {
+			foreach ( Pretix_Sync_Attendees::for_order( $o ) as $row ) {
 				$d = $row['data'];
 				if ( isset( $d['status'] ) && 'revoked' === $d['status'] ) {
 					continue;
@@ -149,11 +174,11 @@ class FSS_Pretix_Comp {
 	 *
 	 * @param array $attendees  list of attendee arrays (title, given_name, family_name, email, status)
 	 */
-	private static function create_order( $product, $attendees, $note, $team, $pass_only ) {
-		$order   = wc_create_order( array( 'created_via' => 'fss-complimentary' ) );
+	private static function create_order( $product, $attendees, $note, $team, $pass_only, $lang = '' ) {
+		$order   = wc_create_order( array( 'created_via' => 'pretix-sync-complimentary' ) );
 		$item_id = $order->add_product( $product, count( $attendees ), array( 'subtotal' => 0, 'total' => 0 ) );
 		$item    = $order->get_item( $item_id );
-		$item->add_meta_data( FSS_Pretix_Attendees::ITEM_META, array_values( $attendees ), true );
+		$item->add_meta_data( Pretix_Sync_Attendees::ITEM_META, array_values( $attendees ), true );
 		$item->save();
 
 		$first = $attendees[0];
@@ -162,25 +187,26 @@ class FSS_Pretix_Comp {
 		if ( '' !== $first['email'] ) {
 			$order->set_billing_email( $first['email'] );
 		}
-		$order->update_meta_data( FSS_Pretix_Attendees::ORDER_FLAG, 'yes' );
-		$order->update_meta_data( '_fss_complimentary', $note );
+		$order->update_meta_data( Pretix_Sync_Attendees::ORDER_FLAG, 'yes' );
+		Pretix_Sync_I18n::stamp_order( $order, $lang );
+		$order->update_meta_data( '_pretix_sync_complimentary', $note );
 		if ( '' !== $team ) {
 			// Same key the checkout field uses, so the badge logic does not need to know the order's origin.
 			$order->update_meta_data( 'team_name', $team );
 		}
 		if ( $pass_only ) {
-			$order->update_meta_data( FSS_Pretix_Attendees::PASS_ONLY_META, 'yes' );
+			$order->update_meta_data( Pretix_Sync_Attendees::PASS_ONLY_META, 'yes' );
 		}
 		$order->calculate_totals( false );
 		$order->set_status( self::STATUS, 'Complimentary ticket – ' . $note . ( $pass_only ? ' (pass only)' : '' ) . ' (created by ' . wp_get_current_user()->user_login . ').' );
 		$order->save();
 
-		FSS_Pretix_Sync::enqueue_order( $order->get_id() );
+		Pretix_Sync_Sync::enqueue_order( $order->get_id() );
 		return $order;
 	}
 
 	private static function back_to_tools( $msg ) {
-		wp_safe_redirect( add_query_arg( 'fss_msg', rawurlencode( $msg ), admin_url( 'admin.php?page=fss-pretix' ) ) );
+		wp_safe_redirect( add_query_arg( 'pretix_sync_msg', rawurlencode( $msg ), admin_url( 'admin.php?page=pretix-sync' ) ) );
 		exit;
 	}
 
@@ -190,7 +216,7 @@ class FSS_Pretix_Comp {
 		if ( ! current_user_can( 'manage_woocommerce' ) ) {
 			wp_die( 'Forbidden' );
 		}
-		check_admin_referer( 'fss_pretix_comp' );
+		check_admin_referer( 'pretix_sync_comp' );
 
 		$product   = wc_get_product( isset( $_POST['product_id'] ) ? absint( $_POST['product_id'] ) : 0 );
 		$note      = isset( $_POST['note'] ) ? sanitize_text_field( wp_unslash( $_POST['note'] ) ) : '';
@@ -228,8 +254,8 @@ class FSS_Pretix_Comp {
 			$seen[ $key ] = $n;
 			$attendees[]  = $a;
 		}
-		if ( ! $product || ! FSS_Pretix_Settings::is_ticket_product( $product ) ) {
-			$errors[] = 'Select an FSS ticket product.';
+		if ( ! $product || ! Pretix_Sync_Settings::is_ticket_product( $product ) ) {
+			$errors[] = 'Select a pretix ticket product.';
 		}
 		if ( ! $attendees ) {
 			$errors[] = 'Enter at least one attendee.';
@@ -238,7 +264,7 @@ class FSS_Pretix_Comp {
 			self::back_to_tools( 'Nothing created. ' . implode( ' ', $errors ) );
 		}
 
-		$order = self::create_order( $product, $attendees, $note, $team, $pass_only );
+		$order = self::create_order( $product, $attendees, $note, $team, $pass_only, self::posted_lang() );
 		wp_safe_redirect( $order->get_edit_order_url() );
 		exit;
 	}
@@ -263,10 +289,10 @@ class FSS_Pretix_Comp {
 		if ( ! current_user_can( 'manage_woocommerce' ) ) {
 			wp_die( 'Forbidden' );
 		}
-		check_admin_referer( 'fss_pretix_comp_csv_sample' );
+		check_admin_referer( 'pretix_sync_comp_csv_sample' );
 		nocache_headers();
 		header( 'Content-Type: text/csv; charset=utf-8' );
-		header( 'Content-Disposition: attachment; filename=fss-attendees-sample.csv' );
+		header( 'Content-Disposition: attachment; filename=pretix-sync-attendees-sample.csv' );
 		$out = fopen( 'php://output', 'w' ); // phpcs:ignore WordPress.WP.AlternativeFunctions
 		fwrite( $out, "\xEF\xBB\xBF" ); // phpcs:ignore WordPress.WP.AlternativeFunctions
 		foreach ( self::sample_rows() as $row ) {
@@ -453,14 +479,14 @@ class FSS_Pretix_Comp {
 		if ( ! current_user_can( 'manage_woocommerce' ) ) {
 			wp_die( 'Forbidden' );
 		}
-		check_admin_referer( 'fss_pretix_comp_csv' );
+		check_admin_referer( 'pretix_sync_comp_csv' );
 
 		$product   = wc_get_product( isset( $_POST['product_id'] ) ? absint( $_POST['product_id'] ) : 0 );
 		$note      = isset( $_POST['note'] ) ? sanitize_text_field( wp_unslash( $_POST['note'] ) ) : '';
 		$team      = isset( $_POST['team_name'] ) ? sanitize_text_field( wp_unslash( $_POST['team_name'] ) ) : '';
 		$pass_only = ! empty( $_POST['pass_only'] );
-		if ( ! $product || ! FSS_Pretix_Settings::is_ticket_product( $product ) ) {
-			self::back_to_tools( 'Import not started. Select an FSS ticket product.' );
+		if ( ! $product || ! Pretix_Sync_Settings::is_ticket_product( $product ) ) {
+			self::back_to_tools( 'Import not started. Select a pretix ticket product.' );
 		}
 		if ( '' === $note ) {
 			self::back_to_tools( 'Import not started. Enter a reason / note.' );
@@ -484,20 +510,21 @@ class FSS_Pretix_Comp {
 		// Kisbetűs, mert a betöltés sanitize_key()-t használ, az pedig kisbetűsít: vegyes kis/nagybetűs tokennél a keresett
 		// transient kulcs sosem egyezne a mentettel ("preview expired").
 		$token = strtolower( wp_generate_password( 20, false ) );
-		set_transient( 'fss_pretix_csv_' . $token, array(
+		set_transient( 'pretix_sync_csv_' . $token, array(
 			'user'       => get_current_user_id(),
 			'product_id' => $product->get_id(),
 			'note'       => $note,
 			'pass_only'  => $pass_only,
+			'lang'       => self::posted_lang(),
 			'rows'       => $rows,
 		), HOUR_IN_SECONDS );
 
-		wp_safe_redirect( add_query_arg( 'fss_csv', $token, admin_url( 'admin.php?page=fss-pretix' ) ) );
+		wp_safe_redirect( add_query_arg( 'pretix_sync_csv', $token, admin_url( 'admin.php?page=pretix-sync' ) ) );
 		exit;
 	}
 
 	private static function load_preview( $token ) {
-		$data = get_transient( 'fss_pretix_csv_' . sanitize_key( $token ) );
+		$data = get_transient( 'pretix_sync_csv_' . sanitize_key( $token ) );
 		if ( ! is_array( $data ) || (int) $data['user'] !== get_current_user_id() ) {
 			return null;
 		}
@@ -506,10 +533,10 @@ class FSS_Pretix_Comp {
 
 	/** Preview table above the forms (tools page). */
 	public static function render_csv_preview() {
-		if ( empty( $_GET['fss_csv'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+		if ( empty( $_GET['pretix_sync_csv'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
 			return;
 		}
-		$token = sanitize_key( wp_unslash( $_GET['fss_csv'] ) ); // phpcs:ignore WordPress.Security.NonceVerification
+		$token = sanitize_key( wp_unslash( $_GET['pretix_sync_csv'] ) ); // phpcs:ignore WordPress.Security.NonceVerification
 		$data  = self::load_preview( $token );
 		if ( ! $data ) {
 			echo '<div class="notice notice-warning inline"><p>The import preview has expired or belongs to another user. Upload the CSV again.</p></div>';
@@ -541,11 +568,11 @@ class FSS_Pretix_Comp {
 		echo '</tbody></table>';
 		if ( $n_ok ) {
 			echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="margin-top:12px">';
-			wp_nonce_field( 'fss_pretix_comp_csv_confirm' );
-			echo '<input type="hidden" name="action" value="fss_pretix_comp_csv_confirm"><input type="hidden" name="token" value="' . esc_attr( $token ) . '">';
+			wp_nonce_field( 'pretix_sync_comp_csv_confirm' );
+			echo '<input type="hidden" name="action" value="pretix_sync_comp_csv_confirm"><input type="hidden" name="token" value="' . esc_attr( $token ) . '">';
 			$confirm = sprintf( 'Create %d attendee(s)? %s', $n_ok, $data['pass_only'] ? 'No emails are sent.' : 'They are emailed.' );
 			echo '<button class="button button-primary" onclick="return confirm(' . esc_attr( wp_json_encode( $confirm ) ) . ')">Create ' . (int) $n_ok . ' attendee(s)</button> ';
-			echo '<a class="button" href="' . esc_url( admin_url( 'admin.php?page=fss-pretix' ) ) . '">Cancel</a></form>';
+			echo '<a class="button" href="' . esc_url( admin_url( 'admin.php?page=pretix-sync' ) ) . '">Cancel</a></form>';
 		} else {
 			echo '<p><strong>Nothing to import.</strong> Fix the file and upload it again.</p>';
 		}
@@ -557,23 +584,23 @@ class FSS_Pretix_Comp {
 		if ( ! current_user_can( 'manage_woocommerce' ) ) {
 			wp_die( 'Forbidden' );
 		}
-		check_admin_referer( 'fss_pretix_comp_csv_confirm' );
+		check_admin_referer( 'pretix_sync_comp_csv_confirm' );
 
 		$token = isset( $_POST['token'] ) ? sanitize_key( wp_unslash( $_POST['token'] ) ) : '';
 		$data  = self::load_preview( $token );
 		if ( ! $data ) {
 			self::back_to_tools( 'Nothing created: the import preview has expired. Upload the CSV again.' );
 		}
-		delete_transient( 'fss_pretix_csv_' . $token ); // one confirm per preview: a reload cannot create everything twice
+		delete_transient( 'pretix_sync_csv_' . $token ); // one confirm per preview: a reload cannot create everything twice
 
 		$product = wc_get_product( $data['product_id'] );
-		if ( ! $product || ! FSS_Pretix_Settings::is_ticket_product( $product ) ) {
-			self::back_to_tools( 'Nothing created: select an FSS ticket product.' );
+		if ( ! $product || ! Pretix_Sync_Settings::is_ticket_product( $product ) ) {
+			self::back_to_tools( 'Nothing created: select a pretix ticket product.' );
 		}
 		$plan   = self::plan_orders( $data['rows'] );
 		$people = 0;
 		foreach ( $plan as $o ) {
-			self::create_order( $product, $o['attendees'], $data['note'], $o['team'], (bool) $data['pass_only'] );
+			self::create_order( $product, $o['attendees'], $data['note'], $o['team'], (bool) $data['pass_only'], isset( $data['lang'] ) ? $data['lang'] : '' );
 			$people += count( $o['attendees'] );
 		}
 		self::back_to_tools( sprintf( 'Created %d order(s) for %d attendee(s)%s. They are synced to pretix in the background (see the status counters below).', count( $plan ), $people, $data['pass_only'] ? ' – pass only, no emails' : '' ) );

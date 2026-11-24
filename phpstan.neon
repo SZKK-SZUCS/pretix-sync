@@ -1,0 +1,13 @@
+includes:
+    - vendor/szepeviktor/phpstan-wordpress/extension.neon
+    - phpstan-baseline.neon
+
+parameters:
+    level: 5
+    paths:
+        - pretix-sync.php
+        - includes
+    excludePaths:
+        - vendor/*
+    # WooCommerce / Action Scheduler are not stubbed here, so their symbols are reported as unknown:
+    # those are collected in phpstan-baseline.neon (new problems still show up).

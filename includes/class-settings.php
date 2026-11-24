@@ -2,18 +2,18 @@
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Settings: WooCommerce → Settings → FSS pretix, plus the per-product "FSS ticket" flag.
+ * Settings: WooCommerce → Settings → Pretix Sync, plus the per-product "pretix ticket" flag.
  */
-class FSS_Pretix_Settings {
+class Pretix_Sync_Settings {
 
-	const PRODUCT_META = '_fss_pretix_ticket';
-	const PASS_ITEM_META = '_fss_pretix_pass_item';
-	const ALL_ACCESS_ITEM_META = '_fss_pretix_all_access_item';
+	const PRODUCT_META = '_pretix_sync_ticket';
+	const PASS_ITEM_META = '_pretix_sync_pass_item';
+	const ALL_ACCESS_ITEM_META = '_pretix_sync_all_access_item';
 
 	public static function init() {
 		add_filter( 'woocommerce_settings_tabs_array', array( __CLASS__, 'add_tab' ), 60 );
-		add_action( 'woocommerce_settings_tabs_fss_pretix', array( __CLASS__, 'render' ) );
-		add_action( 'woocommerce_update_options_fss_pretix', array( __CLASS__, 'save' ) );
+		add_action( 'woocommerce_settings_tabs_pretix_sync', array( __CLASS__, 'render' ) );
+		add_action( 'woocommerce_update_options_pretix_sync', array( __CLASS__, 'save' ) );
 
 		// Product flag.
 		add_action( 'woocommerce_product_options_general_product_data', array( __CLASS__, 'product_field' ) );
@@ -24,18 +24,20 @@ class FSS_Pretix_Settings {
 
 	public static function get( $key, $default = '' ) {
 		$defaults = array(
-			'base_url'           => 'https://pretix.sze.hu',
-			'organizer'          => 'fss',
-			'talks_event'        => 'fss2026-talks',
-			'membership_type'    => '1',
-			'valid_from'         => '2026-11-20T00:00:00+01:00',
-			'valid_until'        => '2026-11-22T23:59:59+01:00',
+			'base_url'           => '',
+			'organizer'          => '',
+			'sessions_event'     => '',
+			'module_sessions'    => 'yes',
+			'module_staff'       => 'yes',
+			'membership_type'    => '',
+			'valid_from'         => '',
+			'valid_until'        => '',
 			'locale'             => 'en',
 			'testmode'           => 'no',
-			'event_name'         => 'Formula Student Symposium 2026',
+			'event_name'         => '',
 			'passes_event'       => '',
 		);
-		$value = get_option( 'fss_pretix_' . $key, null );
+		$value = get_option( 'pretix_sync_' . $key, null );
 		if ( null === $value || '' === $value ) {
 			return isset( $defaults[ $key ] ) ? $defaults[ $key ] : $default;
 		}
@@ -51,14 +53,14 @@ class FSS_Pretix_Settings {
 
 	/** @return array{0:string,1:string} [source label, token] */
 	public static function token_source() {
-		if ( defined( 'FSS_PRETIX_TOKEN' ) && FSS_PRETIX_TOKEN ) {
-			return array( 'wp-config.php constant', trim( FSS_PRETIX_TOKEN ) );
+		if ( defined( 'PRETIX_SYNC_TOKEN' ) && PRETIX_SYNC_TOKEN ) {
+			return array( 'wp-config.php constant', trim( PRETIX_SYNC_TOKEN ) );
 		}
-		$env = getenv( 'FSS_PRETIX_TOKEN' );
+		$env = getenv( 'PRETIX_SYNC_TOKEN' );
 		if ( $env ) {
-			return array( 'environment variable FSS_PRETIX_TOKEN', trim( $env ) );
+			return array( 'environment variable PRETIX_SYNC_TOKEN', trim( $env ) );
 		}
-		foreach ( array( '/run/secrets/fss_pretix_token', '/run/secrets/FSS_PRETIX_TOKEN' ) as $f ) {
+		foreach ( array( '/run/secrets/pretix_sync_token', '/run/secrets/PRETIX_SYNC_TOKEN' ) as $f ) {
 			if ( @is_readable( $f ) ) { // phpcs:ignore
 				$v = trim( (string) file_get_contents( $f ) ); // phpcs:ignore
 				if ( $v ) {
@@ -66,7 +68,7 @@ class FSS_Pretix_Settings {
 				}
 			}
 		}
-		$opt = get_option( 'fss_pretix_api_token', '' );
+		$opt = get_option( 'pretix_sync_api_token', '' );
 		if ( $opt ) {
 			return array( 'plugin setting', trim( $opt ) );
 		}
@@ -77,16 +79,26 @@ class FSS_Pretix_Settings {
 		return 'yes' === self::get( 'testmode' );
 	}
 
+	/** Module: session registration (pretix customer account + membership + sessions event). Off = pass/ticket only. */
+	public static function sessions_enabled() {
+		return 'yes' === self::get( 'module_sessions' );
+	}
+
+	/** Module: complimentary / staff tickets and CSV import. */
+	public static function staff_enabled() {
+		return 'yes' === self::get( 'module_staff' );
+	}
+
 	public static function registration_open() {
-		return 'yes' === get_option( 'fss_pretix_registration_open', 'no' );
+		return self::sessions_enabled() && 'yes' === get_option( 'pretix_sync_registration_open', 'no' );
 	}
 
 	public static function base_url() {
 		return untrailingslashit( self::get( 'base_url' ) );
 	}
 
-	public static function talks_url() {
-		return self::base_url() . '/' . self::get( 'organizer' ) . '/' . self::get( 'talks_event' ) . '/';
+	public static function sessions_url() {
+		return self::base_url() . '/' . self::get( 'organizer' ) . '/' . self::get( 'sessions_event' ) . '/';
 	}
 
 	public static function password_reset_url() {
@@ -94,7 +106,16 @@ class FSS_Pretix_Settings {
 	}
 
 	public static function webhook_url() {
-		return add_query_arg( 'secret', get_option( 'fss_pretix_webhook_secret' ), rest_url( 'fss-pretix/v1/webhook' ) );
+		return add_query_arg( 'secret', get_option( 'pretix_sync_webhook_secret' ), rest_url( 'pretix-sync/v1/webhook' ) );
+	}
+
+	/**
+	 * Product whose meta holds the ticket settings. With Polylang the translations of a product share the settings of
+	 * the default-language product, so they are entered once.
+	 */
+	private static function source_product_id( $product ) {
+		$id = $product->is_type( 'variation' ) ? $product->get_parent_id() : $product->get_id();
+		return Pretix_Sync_I18n::source_post_id( $id );
 	}
 
 	/** Pass tickets (badge printing) are created only when a passes event is configured. */
@@ -107,19 +128,19 @@ class FSS_Pretix_Settings {
 		if ( ! $product ) {
 			return 0;
 		}
-		$id = $product->is_type( 'variation' ) ? $product->get_parent_id() : $product->get_id();
+		$id = self::source_product_id( $product );
 		return (int) get_post_meta( $id, self::PASS_ITEM_META, true );
 	}
 
 	/**
-	 * pretix item ID of the all-access ticket in the LECTURES event for a WooCommerce ticket product, or 0.
-	 * Set only on products whose holders may enter every lecture (staff).
+	 * pretix item ID of the all-access ticket in the SESSIONS event for a WooCommerce ticket product, or 0.
+	 * Set only on products whose holders may enter every session (staff).
 	 */
 	public static function all_access_item_for( $product ) {
-		if ( ! $product ) {
+		if ( ! $product || ! self::sessions_enabled() ) {
 			return 0;
 		}
-		$id = $product->is_type( 'variation' ) ? $product->get_parent_id() : $product->get_id();
+		$id = self::source_product_id( $product );
 		return (int) get_post_meta( $id, self::ALL_ACCESS_ITEM_META, true );
 	}
 
@@ -127,41 +148,48 @@ class FSS_Pretix_Settings {
 		if ( ! $product ) {
 			return false;
 		}
-		$id = $product->is_type( 'variation' ) ? $product->get_parent_id() : $product->get_id();
+		$id = self::source_product_id( $product );
 		return 'yes' === get_post_meta( $id, self::PRODUCT_META, true );
 	}
 
 	/* ---------- settings tab ---------- */
 
 	public static function add_tab( $tabs ) {
-		$tabs['fss_pretix'] = 'FSS pretix';
+		$tabs['pretix_sync'] = 'Pretix Sync';
 		return $tabs;
 	}
 
 	private static function fields() {
-		return array(
-			array( 'title' => 'pretix connection', 'type' => 'title', 'desc' => 'API token source (first match wins): <code>FSS_PRETIX_TOKEN</code> constant in wp-config.php, <code>FSS_PRETIX_TOKEN</code> environment variable, Docker secret <code>fss_pretix_token</code>, or the field below. ' . ( self::token_source()[0] ? '<strong style="color:#008a20">Token found (' . esc_html( self::token_source()[0] ) . ').</strong>' : '<strong style="color:#d63638">Token missing.</strong>' ), 'id' => 'fss_pretix_conn' ),
-			array( 'title' => 'API token (fallback)', 'id' => 'fss_pretix_api_token', 'type' => 'password', 'default' => '', 'css' => 'min-width:350px', 'desc' => 'Only used if no constant / environment variable / Docker secret is set. Stored in the database.' ),
-			array( 'title' => 'pretix base URL', 'id' => 'fss_pretix_base_url', 'type' => 'text', 'default' => 'https://pretix.sze.hu', 'css' => 'min-width:350px' ),
-			array( 'title' => 'Organizer slug', 'id' => 'fss_pretix_organizer', 'type' => 'text', 'default' => 'fss' ),
-			array( 'title' => 'Lectures event slug', 'id' => 'fss_pretix_talks_event', 'type' => 'text', 'default' => 'fss2026-talks' ),
-			array( 'title' => 'Passes event slug', 'id' => 'fss_pretix_passes_event', 'type' => 'text', 'default' => '', 'desc' => 'Optional. pretix event holding one 0 € pass ticket per attendee, for badge printing (Badges → QR code: Reusable Medium ID). Leave empty to disable. The pass item is set per product (Product → General → pretix pass item ID).' ),
-			array( 'title' => 'Membership type ID', 'id' => 'fss_pretix_membership_type', 'type' => 'number', 'default' => '1' ),
-			array( 'title' => 'Membership valid from', 'id' => 'fss_pretix_valid_from', 'type' => 'text', 'default' => '2026-11-20T00:00:00+01:00', 'desc' => 'ISO 8601 with offset. Must be before the first lecture validity window starts.' ),
-			array( 'title' => 'Membership valid until', 'id' => 'fss_pretix_valid_until', 'type' => 'text', 'default' => '2026-11-22T23:59:59+01:00' ),
-			array( 'title' => 'Customer account language', 'id' => 'fss_pretix_locale', 'type' => 'text', 'default' => 'en' ),
-			array( 'title' => 'Event name (emails)', 'id' => 'fss_pretix_event_name', 'type' => 'text', 'default' => 'Formula Student Symposium 2026', 'css' => 'min-width:350px' ),
-			array( 'title' => 'Test mode', 'id' => 'fss_pretix_testmode', 'type' => 'checkbox', 'default' => 'no', 'desc' => 'Create test-mode memberships (only usable when the pretix event is in test mode).' ),
-			array( 'type' => 'sectionend', 'id' => 'fss_pretix_conn' ),
-		);
+		return array_merge( array(
+			array( 'title' => 'pretix connection', 'type' => 'title', 'desc' => 'API token source (first match wins): <code>PRETIX_SYNC_TOKEN</code> constant in wp-config.php, <code>PRETIX_SYNC_TOKEN</code> environment variable, Docker secret <code>pretix_sync_token</code>, or the field below. ' . ( self::token_source()[0] ? '<strong style="color:#008a20">Token found (' . esc_html( self::token_source()[0] ) . ').</strong>' : '<strong style="color:#d63638">Token missing.</strong>' ), 'id' => 'pretix_sync_conn' ),
+			array( 'title' => 'API token (fallback)', 'id' => 'pretix_sync_api_token', 'type' => 'password', 'default' => '', 'css' => 'min-width:350px', 'desc' => 'Only used if no constant / environment variable / Docker secret is set. Stored in the database.' ),
+			array( 'title' => 'pretix base URL', 'id' => 'pretix_sync_base_url', 'type' => 'text', 'default' => '', 'placeholder' => 'https://pretix.example.com', 'css' => 'min-width:350px' ),
+			array( 'title' => 'Organizer slug', 'id' => 'pretix_sync_organizer', 'type' => 'text', 'default' => '' ),
+			array( 'title' => 'Sessions event slug', 'id' => 'pretix_sync_sessions_event', 'type' => 'text', 'default' => '' ),
+			array( 'title' => 'Passes event slug', 'id' => 'pretix_sync_passes_event', 'type' => 'text', 'default' => '', 'desc' => 'Optional. pretix event holding one 0 € pass ticket per attendee, for badge printing (Badges → QR code: Reusable Medium ID). Leave empty to disable. The pass item is set per product (Product → General → pretix pass item ID).' ),
+			array( 'title' => 'Membership type ID', 'id' => 'pretix_sync_membership_type', 'type' => 'number', 'default' => '' ),
+			array( 'title' => 'Membership valid from', 'id' => 'pretix_sync_valid_from', 'type' => 'text', 'default' => '', 'placeholder' => '2027-01-01T00:00:00+01:00', 'desc' => 'ISO 8601 with offset. Must be before the first session validity window starts.' ),
+			array( 'title' => 'Membership valid until', 'id' => 'pretix_sync_valid_until', 'type' => 'text', 'default' => '', 'placeholder' => '2027-01-03T23:59:59+01:00' ),
+			array( 'title' => 'Customer account language (fallback)', 'id' => 'pretix_sync_locale', 'type' => 'text', 'default' => 'en', 'desc' => 'The pretix account gets the language of the order (English or Hungarian); this is used for any other language.' ),
+			array( 'title' => 'Event name (emails)', 'id' => 'pretix_sync_event_name', 'type' => 'text', 'default' => '', 'css' => 'min-width:350px', 'desc' => 'Empty = the site name. With Polylang it is translated under Languages → Translations (group “Pretix Sync”).' ),
+			array( 'title' => 'Test mode', 'id' => 'pretix_sync_testmode', 'type' => 'checkbox', 'default' => 'no', 'desc' => 'Create test-mode memberships (only usable when the pretix event is in test mode).' ),
+			array( 'type' => 'sectionend', 'id' => 'pretix_sync_conn' ),
+
+			array( 'title' => 'Modules', 'type' => 'title', 'desc' => 'The base is always on: attendee details at checkout, a pass (QR) per attendee and the ticket email. Switch on what this event needs.', 'id' => 'pretix_sync_modules' ),
+			array( 'title' => 'Session registration', 'id' => 'pretix_sync_module_sessions', 'type' => 'checkbox', 'default' => 'yes', 'desc' => 'pretix customer account + membership per attendee and a sessions event they register in (with the webhook that links registrations to the pass).' ),
+			array( 'title' => 'Complimentary / staff tickets', 'id' => 'pretix_sync_module_staff', 'type' => 'checkbox', 'default' => 'yes', 'desc' => 'Tools page: complimentary tickets, pass-only mode and CSV import. Badge printing is switched on by setting the Passes event slug above.' ),
+			array( 'type' => 'sectionend', 'id' => 'pretix_sync_modules' ),
+		), Pretix_Sync_Mailer::settings_fields() );
 	}
 
 	public static function render() {
 		woocommerce_admin_fields( self::fields() );
+		if ( self::sessions_enabled() ) {
 		echo '<h2>pretix webhook</h2><p>Create a webhook in pretix (Organizer → Webhooks) with this target URL:</p>';
 		echo '<p><input type="text" readonly style="width:100%;max-width:900px" value="' . esc_attr( self::webhook_url() ) . '" onclick="this.select()"></p>';
-		echo '<p>Events: <em>Order placed, Order marked as paid, Order canceled, Order reactivated, Order changed (all), Order modified</em>. Limit it to the lectures event.</p>';
-		echo '<p>Tools (open registration, pass export, connection test): <a href="' . esc_url( admin_url( 'admin.php?page=fss-pretix' ) ) . '">WooCommerce → FSS pretix</a></p>';
+		echo '<p>Events: <em>Order placed, Order marked as paid, Order canceled, Order reactivated, Order changed (all), Order modified</em>. Limit it to the sessions event.</p>';
+		}
+		echo '<p>Tools (open registration, pass export, connection test): <a href="' . esc_url( admin_url( 'admin.php?page=pretix-sync' ) ) . '">WooCommerce → Pretix Sync</a></p>';
 	}
 
 	public static function save() {
@@ -171,11 +199,16 @@ class FSS_Pretix_Settings {
 	/* ---------- product flag ---------- */
 
 	public static function product_field() {
+		global $post;
+		if ( $post && Pretix_Sync_I18n::is_translation( $post->ID ) ) {
+			echo '<div class="options_group"><p class="form-field"><strong>Pretix Sync:</strong> the ticket settings are kept on the default-language product.</p></div>';
+			return;
+		}
 		echo '<div class="options_group">';
 		woocommerce_wp_checkbox( array(
 			'id'          => self::PRODUCT_META,
-			'label'       => 'FSS ticket (pretix)',
-			'description' => 'Ask for attendee details per ticket and create a pretix pass + lecture registration right for each attendee.',
+			'label'       => 'Pretix ticket',
+			'description' => 'Ask for attendee details per ticket and create a pretix pass + session registration right for each attendee.',
 		) );
 		woocommerce_wp_text_input( array(
 			'id'                => self::PASS_ITEM_META,
@@ -185,22 +218,29 @@ class FSS_Pretix_Settings {
 			'desc_tip'          => true,
 			'description'       => 'ID of the matching pass product in the pretix passes event (badge printing). Leave empty if this ticket needs no badge.',
 		) );
+		if ( self::sessions_enabled() ) {
 		woocommerce_wp_text_input( array(
 			'id'                => self::ALL_ACCESS_ITEM_META,
 			'label'             => 'pretix all-access item ID',
 			'type'              => 'number',
 			'custom_attributes' => array( 'min' => '1', 'step' => '1' ),
 			'desc_tip'          => true,
-			'description'       => 'Staff only. ID of the all-access product in the pretix LECTURES event. Each attendee gets a free ticket of it, linked to their pass, so the pass is accepted at every lecture (the product must be on the lecture check-in lists). Leave empty for normal tickets.',
+			'description'       => 'Staff only. ID of the all-access product in the pretix SESSIONS event. Each attendee gets a free ticket of it, linked to their pass, so the pass is accepted at every session (the product must be on the session check-in lists). Leave empty for normal tickets.',
 		) );
+		}
 		echo '</div>';
 	}
 
 	public static function product_save( $product ) {
+		if ( Pretix_Sync_I18n::is_translation( $product->get_id() ) ) {
+			return; // settings live on the default-language product
+		}
 		$product->update_meta_data( self::PRODUCT_META, isset( $_POST[ self::PRODUCT_META ] ) ? 'yes' : 'no' ); // phpcs:ignore WordPress.Security.NonceVerification
 		$pass_item = isset( $_POST[ self::PASS_ITEM_META ] ) ? absint( $_POST[ self::PASS_ITEM_META ] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification
 		$product->update_meta_data( self::PASS_ITEM_META, $pass_item ? (string) $pass_item : '' );
-		$all_access = isset( $_POST[ self::ALL_ACCESS_ITEM_META ] ) ? absint( $_POST[ self::ALL_ACCESS_ITEM_META ] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification
-		$product->update_meta_data( self::ALL_ACCESS_ITEM_META, $all_access ? (string) $all_access : '' );
+		if ( self::sessions_enabled() ) { // the field is only shown (and saved) with the sessions module
+			$all_access = isset( $_POST[ self::ALL_ACCESS_ITEM_META ] ) ? absint( $_POST[ self::ALL_ACCESS_ITEM_META ] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification
+			$product->update_meta_data( self::ALL_ACCESS_ITEM_META, $all_access ? (string) $all_access : '' );
+		}
 	}
 }
