@@ -110,6 +110,8 @@ class Pretix_Sync_Admin {
 		if ( Pretix_Sync_Settings::sessions_enabled() ) {
 			echo '<h2>Webhook</h2><p>Target URL for the pretix webhook (Organizer → Webhooks):</p><p><input type="text" readonly style="width:100%;max-width:900px" value="' . esc_attr( Pretix_Sync_Settings::webhook_url() ) . '" onclick="this.select()"></p>';
 		}
+		Pretix_Sync_Help::render();
+
 		echo '<p>Settings: <a href="' . esc_url( admin_url( 'admin.php?page=wc-settings&tab=pretix_sync' ) ) . '">WooCommerce → Settings → Pretix Sync</a> · Logs: WooCommerce → Status → Logs (source <code>pretix-sync</code>) · Queue: Tools → Scheduled Actions (group <code>pretix-sync</code>)</p>';
 		echo '</div>';
 	}

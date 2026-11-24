@@ -41,6 +41,7 @@ require_once PRETIX_SYNC_DIR . 'includes/class-checkout.php';
 require_once PRETIX_SYNC_DIR . 'includes/class-mailer.php';
 require_once PRETIX_SYNC_DIR . 'includes/class-sync.php';
 require_once PRETIX_SYNC_DIR . 'includes/class-webhook.php';
+require_once PRETIX_SYNC_DIR . 'includes/class-help.php';
 require_once PRETIX_SYNC_DIR . 'includes/class-admin.php';
 require_once PRETIX_SYNC_DIR . 'includes/class-comp.php';
 

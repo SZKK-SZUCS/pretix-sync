@@ -94,3 +94,120 @@ msgstr "Az Ön {event_name} jegye – regisztráljon a programokra"
 
 msgid "e.g. Dr."
 msgstr "pl. Dr."
+
+msgid "How it works – overview"
+msgstr "Hogyan működik – áttekintés"
+
+msgid "Pretix Sync connects the WooCommerce shop to pretix. The buyer pays in WooCommerce; the plugin then creates everything in pretix through the pretix API, in the background, so the checkout never waits for pretix."
+msgstr "A Pretix Sync összeköti a WooCommerce webshopot a pretixszel. A vásárló a WooCommerce-ben fizet, ezután a plugin a háttérben, a pretix API-n keresztül létrehoz mindent a pretixben, így a pénztár soha nem vár a pretixre."
+
+msgid "Every attendee gets a pass: a reusable medium in pretix. Its QR code is the attendee's entry to the event and can be printed on a badge."
+msgstr "Minden résztvevő kap egy belépőkártyát (pass): egy újrahasználható médiumot (reusable medium) a pretixben. A QR-kódja a résztvevő belépője a rendezvényre, és névkártyára is nyomtatható."
+
+msgid "Attendee details (and any custom checkout fields) are collected per ticket at checkout, so every attendee has their own pass and email."
+msgstr "A résztvevők adatait (és az egyedi checkout mezőket) jegyenként kéri be a pénztár, így minden résztvevőnek saját kártyája és e-mailje lesz."
+
+msgid "All work runs in the Action Scheduler queue (group pretix-sync). A temporary pretix outage is retried automatically; real errors go to the order notes, to the log (WooCommerce → Status → Logs, source pretix-sync) and by email to the site admin address."
+msgstr "Minden munka az Action Scheduler sorban fut (csoport: pretix-sync). A pretix átmeneti kiesését a plugin automatikusan újrapróbálja; a valódi hibák a rendelés jegyzeteibe, a naplóba (WooCommerce → Állapot → Naplók, forrás: pretix-sync) és e-mailben az oldal admin címére kerülnek."
+
+msgid "What to prepare in pretix (the settings explained)"
+msgstr "Mit kell előkészíteni a pretixben (a beállítások magyarázata)"
+
+msgid "Each setting on the Pretix Sync settings tab maps to something in pretix. Use “Test pretix connection” below after filling them in."
+msgstr "A Pretix Sync beállítások fül minden mezője a pretix egy elemének felel meg. A kitöltés után használd lent a „Test pretix connection” gombot."
+
+msgid "API token: create a team in pretix (Organizer → Teams) with an API token that may manage customer accounts and reusable media for the organizer, and view and change orders in the events used. Put the token in the PRETIX_SYNC_TOKEN constant in wp-config.php, an environment variable or a Docker secret; the settings field is only the last fallback and is stored in the database."
+msgstr "API token: hozz létre egy csapatot a pretixben (Organizer → Teams), a hozzá tartozó API tokennel, amely kezelheti az organizer ügyfélfiókjait és újrahasználható médiumait, és megtekintheti és módosíthatja a használt események rendeléseit. A tokent tedd a wp-config.php PRETIX_SYNC_TOKEN konstansába, környezeti változóba vagy Docker secretbe; a beállítás-mező csak a végső tartalék, és az adatbázisban tárolódik."
+
+msgid "pretix base URL and Organizer slug: the first parts of your pretix addresses, https://pretix.example.com/<organizer>/<event>/."
+msgstr "pretix base URL és Organizer slug: a pretix-címeid első részei: https://pretix.example.com/<organizer>/<esemény>/."
+
+msgid "Sessions event slug: the pretix event where attendees register for sessions. Give its session products a fixed validity window and “require a valid membership”; that is how pretix refuses overlapping sessions."
+msgstr "Sessions event slug: az a pretix-esemény, ahol a résztvevők a programokra regisztrálnak. A program-termékeknek legyen fix érvényességi idejük és „érvényes tagság szükséges” beállításuk; így utasítja vissza a pretix az egymást átfedő programokat."
+
+msgid "Membership type ID: the number of the membership type (Organizer → Customer accounts → Membership types). Every attendee gets one membership of this type."
+msgstr "Membership type ID: a tagsági típus azonosítója (Organizer → Customer accounts → Membership types). Minden résztvevő egy ilyen típusú tagságot kap."
+
+msgid "Membership valid from / until: ISO 8601 with a time zone offset. The window must start before the first session and end after the last one, otherwise pretix does not accept the membership for those sessions."
+msgstr "Membership valid from / until: ISO 8601 formátum időzóna-eltolással. Az időszaknak az első program előtt kell kezdődnie és az utolsó után végződnie, különben a pretix nem fogadja el a tagságot ezekre a programokra."
+
+msgid "Passes event slug (optional): a pretix event with one free pass ticket per attendee, used for badge printing (Badges → QR code: Reusable Medium ID). Set the matching pass item ID on each WooCommerce ticket product. Empty = no badge tickets."
+msgstr "Passes event slug (opcionális): egy pretix-esemény, amelyben résztvevőnként egy ingyenes pass jegy van a névkártya-nyomtatáshoz (Badges → QR code: Reusable Medium ID). A megfelelő pass item ID-t a WooCommerce jegy-termékeken kell megadni. Üresen: nincs névkártya-jegy."
+
+msgid "Customer account language and Event name: the pretix account gets the language of the order (English or Hungarian), the fallback is used for any other language; the event name is used in the emails."
+msgstr "Customer account language és Event name: a pretix-fiók a rendelés nyelvét kapja (angol vagy magyar), minden más nyelvnél a tartalék érték érvényes; az eseménynév az e-mailekben szerepel."
+
+msgid "Test mode: memberships and orders are created in pretix test mode. Only use it while the pretix event is in test mode too."
+msgstr "Test mode: a tagságok és rendelések a pretix tesztmódjában jönnek létre. Csak akkor használd, ha a pretix-esemény is tesztmódban van."
+
+msgid "From payment to registration"
+msgstr "A fizetéstől a regisztrációig"
+
+msgid "Order paid (status processing or completed): one pass is created per attendee, labelled with the name and the order number. With a Passes event and a pass item ID on the product, a free badge ticket is also created and linked to the pass. The badge text is the custom checkout field marked “Print on badge”."
+msgstr "Kifizetett rendelés (feldolgozás alatt vagy teljesítve): résztvevőnként egy pass jön létre, a névvel és a rendelésszámmal címkézve. Passes event és a terméken megadott pass item ID esetén egy ingyenes névkártya-jegy is létrejön, és a passhoz kapcsolódik. A névkártya szövege a „Print on badge” jelölésű egyedi checkout mező értéke."
+
+msgid "Before session registration is open the attendee only receives the “ticket” email. No pretix account exists yet."
+msgstr "A programregisztráció megnyitása előtt a résztvevő csak a „jegy” e-mailt kapja meg. Pretix-fiók még nincs."
+
+msgid "“Open session registration now” (above): for every attendee the plugin finds or creates the pretix customer account (new accounts get pretix's activation email), creates the membership, links the pass to the account and sends the “registration open” email. Orders paid after that get everything at once, with the “welcome” email."
+msgstr "Az „Open session registration now” gomb (fent): minden résztvevőnél a plugin megkeresi vagy létrehozza a pretix ügyfélfiókot (az új fiókok megkapják a pretix aktiváló e-mailjét), létrehozza a tagságot, a passt a fiókhoz köti, és elküldi a „regisztráció megnyílt” e-mailt. Az ezután kifizetett rendelések mindent egyszerre kapnak, a „üdvözlő” e-mailjel."
+
+msgid "Pass-only tickets (staff whose pass is handed over at the venue): pass and badge only; no emails, no account, not even after registration opens."
+msgstr "Csak-pass jegyek (a helyszínen átadott kártyával rendelkező stáb): csak pass és névkártya; nincs e-mail, nincs fiók, a regisztráció megnyitása után sem."
+
+msgid "Every step saves its result immediately, so a re-run only does what is still missing. “Re-run sync for all orders” is safe to click at any time."
+msgstr "Minden lépés azonnal elmenti az eredményét, ezért az újrafuttatás csak a hiányzó lépéseket végzi el. A „Re-run sync for all orders” gombot bármikor biztonságosan megnyomhatod."
+
+msgid "Webhook: how it works"
+msgstr "Webhook: hogyan működik"
+
+msgid "pretix does not link a session registration made in its web shop to the attendee's pass on its own. The webhook closes that gap: whenever an order in the sessions event changes, pretix calls the target URL above and the plugin updates the pass, so the pass is accepted at the check-in of exactly the sessions the attendee is registered for."
+msgstr "A pretix magától nem köti a webshopjában leadott programregisztrációt a résztvevő passához. A webhook ezt a hiányt pótolja: amikor a programesemény egy rendelése változik, a pretix meghívja a fenti címet, és a plugin frissíti a passt, így a pass pontosan azoknál a programoknál lesz elfogadva a bejelentkezéskor, amelyekre a résztvevő regisztrált."
+
+msgid "Set-up: in pretix open Organizer → Webhooks → Add, paste the target URL above, limit it to the sessions event and tick: Order placed, Order marked as paid, Order canceled, Order reactivated, Order changed (all) and Order modified."
+msgstr "Beállítás: a pretixben nyisd meg az Organizer → Webhooks → Add oldalt, illeszd be a fenti címet, korlátozd a programeseményre, és jelöld be: Order placed, Order marked as paid, Order canceled, Order reactivated, Order changed (all) és Order modified."
+
+msgid "The secret parameter in the URL is the only authentication. Treat the URL like a password and do not share it."
+msgstr "A cím secret paramétere az egyetlen hitelesítés. Kezeld a címet jelszóként, ne oszd meg."
+
+msgid "The call only carries the event and the order code. The plugin answers at once and does the work in the queue: it fetches the real state of the order from the pretix API, so repeated or out-of-order calls do no harm. Calls for other events are ignored."
+msgstr "A hívás csak az eseményt és a rendelés kódját tartalmazza. A plugin azonnal válaszol, a munkát a sorban végzi: lekéri a rendelés valódi állapotát a pretix API-ból, így az ismételt vagy sorrenden kívüli hívások nem okoznak kárt. Más események hívásait figyelmen kívül hagyja."
+
+msgid "What it does: the links of the pass become the old links, minus every position of this order, plus the active positions of this order. A paid or pending order links its sessions; a canceled order or a canceled position removes them, which frees the session from the pass."
+msgstr "Mit csinál: a pass kapcsolatai a régi kapcsolatok lesznek, a rendelés összes pozíciója nélkül, plusz a rendelés aktív pozíciói. Egy kifizetett vagy függő rendelés összeköti a programjait; a lemondott rendelés vagy pozíció törli azokat, így a program leválik a passról."
+
+msgid "Orders without a customer account (not placed through the attendee's account) cannot be linked; they are skipped and logged as a warning. If the customer has no active pass, the call ends in an error and the admin gets an email."
+msgstr "Az ügyfélfiók nélküli rendeléseket (nem a résztvevő fiókján át leadottakat) nem lehet összekötni; ezeket a plugin kihagyja és figyelmeztetésként naplózza. Ha az ügyfélnek nincs aktív passa, a hívás hibával végződik, és az admin e-mailt kap."
+
+msgid "A temporary error is retried four times, after 1, 4, 9 and 16 minutes. After that the error is logged and emailed to the site admin address."
+msgstr "Átmeneti hiba esetén négyszer próbálja újra, 1, 4, 9 és 16 perc múlva. Utána a hibát naplózza és e-mailben elküldi az oldal admin címére."
+
+msgid "Safety net: “Re-link all session registrations to passes” re-reads every order of the sessions event and repairs the links. Use it after the webhook was down or was set up late."
+msgstr "Biztonsági háló: a „Re-link all session registrations to passes” gomb újraolvassa a programesemény minden rendelését, és javítja a kapcsolatokat. Használd, ha a webhook nem működött, vagy későn lett beállítva."
+
+msgid "Check that it works: register a test attendee for a session, then look for “Pass …: registration … linked” in the log (WooCommerce → Status → Logs, source pretix-sync)."
+msgstr "Működés ellenőrzése: regisztrálj egy teszt résztvevőt egy programra, majd keresd a naplóban a „Pass …: registration … linked” sort (WooCommerce → Állapot → Naplók, forrás: pretix-sync)."
+
+msgid "Refunds and cancellations"
+msgstr "Visszatérítések és lemondások"
+
+msgid "When a WooCommerce order is refunded or cancelled, the plugin undoes everything for its attendees, step by step: it cancels their session registrations (pretix emails the attendee about it) unless the same pretix account holds another valid ticket, invalidates the membership, cancels the badge and all-access tickets and deactivates the pass. A deactivated pass no longer opens any door. A failed step is retried and reported in the order notes."
+msgstr "Ha egy WooCommerce rendelést visszatérítenek vagy lemondanak, a plugin a résztvevőire visszavon mindent, lépésről lépésre: lemondja a programregisztrációikat (erről a pretix e-mailt küld a résztvevőnek), kivéve ha ugyanennek a pretix-fióknak van másik érvényes jegye, érvényteleníti a tagságot, lemondja a névkártya- és az all-access jegyeket, és deaktiválja a passt. A deaktivált pass már egy ajtót sem nyit. A sikertelen lépést újrapróbálja, és a rendelés jegyzeteiben jelzi."
+
+msgid "Where to look when something is wrong"
+msgstr "Hová nézz, ha hiba van"
+
+msgid "The order notes show every sync and revoke result of that order. “Re-run pretix sync” on the order repeats only the missing steps."
+msgstr "A rendelés jegyzetei mutatják a rendelés minden szinkron- és visszavonás-eredményét. A rendelésen a „Re-run pretix sync” csak a hiányzó lépéseket ismétli meg."
+
+msgid "Logs: WooCommerce → Status → Logs, source pretix-sync. Queue: Tools → Scheduled Actions, group pretix-sync (failed and pending jobs, with retries)."
+msgstr "Naplók: WooCommerce → Állapot → Naplók, forrás: pretix-sync. Sor: Eszközök → Scheduled Actions, csoport: pretix-sync (sikertelen és függő feladatok, újrapróbálkozásokkal)."
+
+msgid "“Test pretix connection” checks the token, the URL and access to customers, memberships, reusable media and orders."
+msgstr "A „Test pretix connection” ellenőrzi a tokent, a címet, és a hozzáférést az ügyfelekhez, tagságokhoz, újrahasználható médiumokhoz és rendelésekhez."
+
+msgid "How Pretix Sync works"
+msgstr "Hogyan működik a Pretix Sync"
+
+msgid "How every setting and the webhook work is explained under the Webhook section of the Pretix Sync page."
+msgstr "Az egyes beállítások és a webhook működését a Pretix Sync oldal Webhook szakasza alatt találod."
