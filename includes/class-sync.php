@@ -165,7 +165,7 @@ class Pretix_Sync_Sync {
 			if ( $c ) {
 				$a['customer_new'] = false;
 			} else {
-				$c = Pretix_Sync_API::create_customer( $a['email'], Pretix_Sync_Attendees::name_parts( $a ), true );
+				$c = Pretix_Sync_API::create_customer( $a['email'], Pretix_Sync_Attendees::name_parts( $a ), true, Pretix_Sync_I18n::pretix_locale( $order ) );
 				if ( is_wp_error( $c ) ) {
 					return $fail( $c );
 				}

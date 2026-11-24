@@ -121,11 +121,11 @@ class Pretix_Sync_API {
 		return ! empty( $r['results'] ) ? $r['results'][0] : null;
 	}
 
-	public static function create_customer( $email, $name_parts, $send_email = true ) {
+	public static function create_customer( $email, $name_parts, $send_email = true, $locale = '' ) {
 		return self::request( 'POST', self::org() . 'customers/', array(
 			'email'      => $email,
 			'name_parts' => $name_parts,
-			'locale'     => Pretix_Sync_Settings::get( 'locale' ),
+			'locale'     => '' !== $locale ? $locale : Pretix_Sync_Settings::get( 'locale' ),
 			'send_email' => (bool) $send_email,
 		) );
 	}

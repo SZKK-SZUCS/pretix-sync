@@ -9,6 +9,7 @@
  * WC requires at least: 8.0
  * Author:            Széchenyi István University
  * Text Domain:       pretix-sync
+ * Domain Path:       /languages
  */
 
 defined( 'ABSPATH' ) || exit;
@@ -27,6 +28,7 @@ add_action( 'before_woocommerce_init', function () {
 	}
 } );
 
+require_once PRETIX_SYNC_DIR . 'includes/class-i18n.php';
 require_once PRETIX_SYNC_DIR . 'includes/class-settings.php';
 require_once PRETIX_SYNC_DIR . 'includes/class-api.php';
 require_once PRETIX_SYNC_DIR . 'includes/class-attendees.php';
@@ -44,6 +46,7 @@ add_action( 'plugins_loaded', function () {
 		} );
 		return;
 	}
+	Pretix_Sync_I18n::init();
 	Pretix_Sync_Settings::init();
 	Pretix_Sync_Checkout::init();
 	Pretix_Sync_Sync::init();

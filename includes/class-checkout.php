@@ -146,6 +146,7 @@ class Pretix_Sync_Checkout {
 	public static function flag_order( $order, $data ) {
 		foreach ( self::ticket_cart_items() as $info ) {
 			$order->update_meta_data( Pretix_Sync_Attendees::ORDER_FLAG, 'yes' );
+			Pretix_Sync_I18n::stamp_order( $order );
 			return;
 		}
 	}

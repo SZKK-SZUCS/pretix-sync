@@ -56,7 +56,9 @@ class Pretix_Sync_Comp {
 	private static function ticket_products() {
 		return array_filter(
 			wc_get_products( array( 'limit' => -1, 'status' => array( 'publish', 'private' ) ) ),
-			array( 'Pretix_Sync_Settings', 'is_ticket_product' )
+			function ( $p ) {
+				return Pretix_Sync_Settings::is_ticket_product( $p ) && ! Pretix_Sync_I18n::is_translation( $p->get_id() );
+			}
 		);
 	}
 
@@ -87,6 +89,7 @@ class Pretix_Sync_Comp {
 		echo '</td></tr>';
 		echo '<tr><th>Reason / note</th><td><input type="text" name="note" style="width:100%" placeholder="e.g. Competition winner – LinkedIn giveaway" required></td></tr>';
 		echo '<tr><th>Team name</th><td><input type="text" name="team_name" style="width:100%" placeholder="Printed on the badge (optional)"></td></tr>';
+		echo self::lang_row(); // phpcs:ignore WordPress.Security.EscapeOutput
 		echo '<tr><th>Pass only</th><td>' . self::pass_only_checkbox() . '</td></tr></table>'; // phpcs:ignore WordPress.Security.EscapeOutput
 		echo '<table class="widefat striped" style="max-width:900px"><thead><tr><th>#</th><th>Title</th><th>Given name *</th><th>Family name *</th><th>Email *</th></tr></thead><tbody>';
 		for ( $i = 0; $i < 5; $i++ ) {
@@ -110,10 +113,29 @@ class Pretix_Sync_Comp {
 		echo '</td></tr>';
 		echo '<tr><th>Reason / note</th><td><input type="text" name="note" style="width:100%" placeholder="e.g. Staff" required></td></tr>';
 		echo '<tr><th>Team name</th><td><input type="text" name="team_name" style="width:100%" placeholder="Default for rows without a team column (optional)"></td></tr>';
+		echo self::lang_row(); // phpcs:ignore WordPress.Security.EscapeOutput
 		echo '<tr><th>Pass only</th><td>' . self::pass_only_checkbox() . '</td></tr>'; // phpcs:ignore WordPress.Security.EscapeOutput
 		echo '<tr><th>CSV file</th><td><input type="file" name="csv_file" accept=".csv,.txt,text/csv"></td></tr>';
 		echo '<tr><th>…or paste</th><td><textarea name="csv_text" rows="6" style="width:100%;font-family:monospace" placeholder="given_name;family_name;email&#10;Anna;Kovács;"></textarea></td></tr></table>';
 		echo '<p><button class="button">Preview import</button></p></form>';
+	}
+
+	/** Table row to pick the language of the attendee emails (only with Polylang). */
+	private static function lang_row() {
+		$languages = Pretix_Sync_I18n::languages();
+		if ( ! $languages ) {
+			return '';
+		}
+		$html = '<tr><th>Email language</th><td><select name="lang">';
+		foreach ( $languages as $slug => $l ) {
+			$html .= '<option value="' . esc_attr( $slug ) . '"' . selected( $slug, Pretix_Sync_I18n::default_lang(), false ) . '>' . esc_html( $l['name'] ) . '</option>';
+		}
+		return $html . '</select></td></tr>';
+	}
+
+	private static function posted_lang() {
+		$lang = isset( $_POST['lang'] ) ? sanitize_key( wp_unslash( $_POST['lang'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
+		return array_key_exists( $lang, Pretix_Sync_I18n::languages() ) ? $lang : '';
 	}
 
 	/* ---------- shared helpers ---------- */
@@ -152,7 +174,7 @@ class Pretix_Sync_Comp {
 	 *
 	 * @param array $attendees  list of attendee arrays (title, given_name, family_name, email, status)
 	 */
-	private static function create_order( $product, $attendees, $note, $team, $pass_only ) {
+	private static function create_order( $product, $attendees, $note, $team, $pass_only, $lang = '' ) {
 		$order   = wc_create_order( array( 'created_via' => 'pretix-sync-complimentary' ) );
 		$item_id = $order->add_product( $product, count( $attendees ), array( 'subtotal' => 0, 'total' => 0 ) );
 		$item    = $order->get_item( $item_id );
@@ -166,6 +188,7 @@ class Pretix_Sync_Comp {
 			$order->set_billing_email( $first['email'] );
 		}
 		$order->update_meta_data( Pretix_Sync_Attendees::ORDER_FLAG, 'yes' );
+		Pretix_Sync_I18n::stamp_order( $order, $lang );
 		$order->update_meta_data( '_pretix_sync_complimentary', $note );
 		if ( '' !== $team ) {
 			// Same key the checkout field uses, so the badge logic does not need to know the order's origin.
@@ -241,7 +264,7 @@ class Pretix_Sync_Comp {
 			self::back_to_tools( 'Nothing created. ' . implode( ' ', $errors ) );
 		}
 
-		$order = self::create_order( $product, $attendees, $note, $team, $pass_only );
+		$order = self::create_order( $product, $attendees, $note, $team, $pass_only, self::posted_lang() );
 		wp_safe_redirect( $order->get_edit_order_url() );
 		exit;
 	}
@@ -492,6 +515,7 @@ class Pretix_Sync_Comp {
 			'product_id' => $product->get_id(),
 			'note'       => $note,
 			'pass_only'  => $pass_only,
+			'lang'       => self::posted_lang(),
 			'rows'       => $rows,
 		), HOUR_IN_SECONDS );
 
@@ -576,7 +600,7 @@ class Pretix_Sync_Comp {
 		$plan   = self::plan_orders( $data['rows'] );
 		$people = 0;
 		foreach ( $plan as $o ) {
-			self::create_order( $product, $o['attendees'], $data['note'], $o['team'], (bool) $data['pass_only'] );
+			self::create_order( $product, $o['attendees'], $data['note'], $o['team'], (bool) $data['pass_only'], isset( $data['lang'] ) ? $data['lang'] : '' );
 			$people += count( $o['attendees'] );
 		}
 		self::back_to_tools( sprintf( 'Created %d order(s) for %d attendee(s)%s. They are synced to pretix in the background (see the status counters below).', count( $plan ), $people, $data['pass_only'] ? ' – pass only, no emails' : '' ) );

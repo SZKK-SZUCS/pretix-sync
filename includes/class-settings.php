@@ -109,6 +109,15 @@ class Pretix_Sync_Settings {
 		return add_query_arg( 'secret', get_option( 'pretix_sync_webhook_secret' ), rest_url( 'pretix-sync/v1/webhook' ) );
 	}
 
+	/**
+	 * Product whose meta holds the ticket settings. With Polylang the translations of a product share the settings of
+	 * the default-language product, so they are entered once.
+	 */
+	private static function source_product_id( $product ) {
+		$id = $product->is_type( 'variation' ) ? $product->get_parent_id() : $product->get_id();
+		return Pretix_Sync_I18n::source_post_id( $id );
+	}
+
 	/** Pass tickets (badge printing) are created only when a passes event is configured. */
 	public static function passes_enabled() {
 		return '' !== trim( (string) self::get( 'passes_event' ) );
@@ -119,7 +128,7 @@ class Pretix_Sync_Settings {
 		if ( ! $product ) {
 			return 0;
 		}
-		$id = $product->is_type( 'variation' ) ? $product->get_parent_id() : $product->get_id();
+		$id = self::source_product_id( $product );
 		return (int) get_post_meta( $id, self::PASS_ITEM_META, true );
 	}
 
@@ -131,7 +140,7 @@ class Pretix_Sync_Settings {
 		if ( ! $product || ! self::sessions_enabled() ) {
 			return 0;
 		}
-		$id = $product->is_type( 'variation' ) ? $product->get_parent_id() : $product->get_id();
+		$id = self::source_product_id( $product );
 		return (int) get_post_meta( $id, self::ALL_ACCESS_ITEM_META, true );
 	}
 
@@ -139,7 +148,7 @@ class Pretix_Sync_Settings {
 		if ( ! $product ) {
 			return false;
 		}
-		$id = $product->is_type( 'variation' ) ? $product->get_parent_id() : $product->get_id();
+		$id = self::source_product_id( $product );
 		return 'yes' === get_post_meta( $id, self::PRODUCT_META, true );
 	}
 
@@ -161,8 +170,8 @@ class Pretix_Sync_Settings {
 			array( 'title' => 'Membership type ID', 'id' => 'pretix_sync_membership_type', 'type' => 'number', 'default' => '' ),
 			array( 'title' => 'Membership valid from', 'id' => 'pretix_sync_valid_from', 'type' => 'text', 'default' => '', 'placeholder' => '2027-01-01T00:00:00+01:00', 'desc' => 'ISO 8601 with offset. Must be before the first session validity window starts.' ),
 			array( 'title' => 'Membership valid until', 'id' => 'pretix_sync_valid_until', 'type' => 'text', 'default' => '', 'placeholder' => '2027-01-03T23:59:59+01:00' ),
-			array( 'title' => 'Customer account language', 'id' => 'pretix_sync_locale', 'type' => 'text', 'default' => 'en' ),
-			array( 'title' => 'Event name (emails)', 'id' => 'pretix_sync_event_name', 'type' => 'text', 'default' => '', 'css' => 'min-width:350px' ),
+			array( 'title' => 'Customer account language (fallback)', 'id' => 'pretix_sync_locale', 'type' => 'text', 'default' => 'en', 'desc' => 'The pretix account gets the language of the order (English or Hungarian); this is used for any other language.' ),
+			array( 'title' => 'Event name (emails)', 'id' => 'pretix_sync_event_name', 'type' => 'text', 'default' => '', 'css' => 'min-width:350px', 'desc' => 'Empty = the site name. With Polylang it is translated under Languages → Translations (group “Pretix Sync”).' ),
 			array( 'title' => 'Test mode', 'id' => 'pretix_sync_testmode', 'type' => 'checkbox', 'default' => 'no', 'desc' => 'Create test-mode memberships (only usable when the pretix event is in test mode).' ),
 			array( 'type' => 'sectionend', 'id' => 'pretix_sync_conn' ),
 
@@ -190,6 +199,11 @@ class Pretix_Sync_Settings {
 	/* ---------- product flag ---------- */
 
 	public static function product_field() {
+		global $post;
+		if ( $post && Pretix_Sync_I18n::is_translation( $post->ID ) ) {
+			echo '<div class="options_group"><p class="form-field"><strong>Pretix Sync:</strong> the ticket settings are kept on the default-language product.</p></div>';
+			return;
+		}
 		echo '<div class="options_group">';
 		woocommerce_wp_checkbox( array(
 			'id'          => self::PRODUCT_META,
@@ -218,6 +232,9 @@ class Pretix_Sync_Settings {
 	}
 
 	public static function product_save( $product ) {
+		if ( Pretix_Sync_I18n::is_translation( $product->get_id() ) ) {
+			return; // settings live on the default-language product
+		}
 		$product->update_meta_data( self::PRODUCT_META, isset( $_POST[ self::PRODUCT_META ] ) ? 'yes' : 'no' ); // phpcs:ignore WordPress.Security.NonceVerification
 		$pass_item = isset( $_POST[ self::PASS_ITEM_META ] ) ? absint( $_POST[ self::PASS_ITEM_META ] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification
 		$product->update_meta_data( self::PASS_ITEM_META, $pass_item ? (string) $pass_item : '' );

@@ -23,6 +23,17 @@ Emails
   (Emails section). Empty field = default text. Placeholders: {name} {event_name} {buyer_note} {register_url}
   {pwreset_url} {account_note} {registration_note}.
 
+Languages (English / Hungarian, Polylang optional)
+- Checkout fields and the default email texts are translated (Hungarian .mo in /languages). Change/extend:
+  edit languages/pretix-sync-hu_HU.po, then run `python tools/build-i18n.py` (rebuilds the .pot and the .mo files and
+  fails if a string is missing).
+- Every order remembers the language it was placed in; its emails, the pretix account and the links into the pretix shop
+  (via pretix' /locale/set) use that language, also when the job runs in the background.
+- With Polylang: email texts and the event name you edit in the settings appear under Languages → Translations
+  (group "Pretix Sync") and are sent in the order's language. For a bilingual shop install Polylang for WooCommerce
+  too (the plugin warns if it is missing). The ticket flag / pretix item IDs are set once, on the default-language product.
+- Complimentary orders: pick the email language on the form (with Polylang).
+
 Flow
 - Paid order → per attendee: pretix reusable medium (pass QR) + "ticket" email.
 - "Open session registration" (tools page) → per attendee: pretix customer (activation email), membership,
