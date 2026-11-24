@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Pretix Sync
  * Description:       Connects WooCommerce ticket sales with pretix: per-attendee checkout fields, pretix customer accounts, memberships and one reusable QR pass per attendee for session check-in.
- * Version:           2.0.0
+ * Version:           2.1.0
  * Requires at least: 6.2
  * Requires PHP:      7.4
  * Requires Plugins:  woocommerce
@@ -14,7 +14,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'PRETIX_SYNC_VERSION', '2.0.0' );
+define( 'PRETIX_SYNC_VERSION', '2.1.0' );
 define( 'PRETIX_SYNC_FILE', __FILE__ );
 define( 'PRETIX_SYNC_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRETIX_SYNC_AS_GROUP', 'pretix-sync' );
@@ -35,12 +35,14 @@ add_action( 'before_woocommerce_init', function () {
 
 require_once PRETIX_SYNC_DIR . 'includes/class-i18n.php';
 require_once PRETIX_SYNC_DIR . 'includes/class-settings.php';
+require_once PRETIX_SYNC_DIR . 'includes/class-fields.php';
 require_once PRETIX_SYNC_DIR . 'includes/class-api.php';
 require_once PRETIX_SYNC_DIR . 'includes/class-attendees.php';
 require_once PRETIX_SYNC_DIR . 'includes/class-checkout.php';
 require_once PRETIX_SYNC_DIR . 'includes/class-mailer.php';
 require_once PRETIX_SYNC_DIR . 'includes/class-sync.php';
 require_once PRETIX_SYNC_DIR . 'includes/class-webhook.php';
+require_once PRETIX_SYNC_DIR . 'includes/class-help.php';
 require_once PRETIX_SYNC_DIR . 'includes/class-admin.php';
 require_once PRETIX_SYNC_DIR . 'includes/class-comp.php';
 

@@ -63,6 +63,10 @@ class Pretix_Sync_Comp {
 	}
 
 	private static function product_select( $products ) {
+		if ( ! $products ) {
+			echo '<em>' . esc_html__( 'No ticket product yet. Open the WooCommerce product, tick “Pretix ticket” under Product data → General and save it.', 'pretix-sync' ) . '</em>';
+			return;
+		}
 		echo '<select name="product_id" required>';
 		foreach ( $products as $p ) {
 			echo '<option value="' . (int) $p->get_id() . '">' . esc_html( $p->get_name() ) . '</option>';
@@ -88,7 +92,7 @@ class Pretix_Sync_Comp {
 		self::product_select( $products );
 		echo '</td></tr>';
 		echo '<tr><th>Reason / note</th><td><input type="text" name="note" style="width:100%" placeholder="e.g. Competition winner – LinkedIn giveaway" required></td></tr>';
-		echo '<tr><th>Team name</th><td><input type="text" name="team_name" style="width:100%" placeholder="Printed on the badge (optional)"></td></tr>';
+		echo '<tr><th>Badge text</th><td><input type="text" name="team_name" style="width:100%" placeholder="Printed on the badge (optional)"></td></tr>';
 		echo self::lang_row(); // phpcs:ignore WordPress.Security.EscapeOutput
 		echo '<tr><th>Pass only</th><td>' . self::pass_only_checkbox() . '</td></tr></table>'; // phpcs:ignore WordPress.Security.EscapeOutput
 		echo '<table class="widefat striped" style="max-width:900px"><thead><tr><th>#</th><th>Title</th><th>Given name *</th><th>Family name *</th><th>Email *</th></tr></thead><tbody>';
@@ -104,7 +108,7 @@ class Pretix_Sync_Comp {
 
 		echo '<h3>Import from CSV</h3>';
 		echo '<p><a class="button" href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=pretix_sync_comp_csv_sample' ), 'pretix_sync_comp_csv_sample' ) ) . '">Download sample CSV</a> <span class="description">Open it in Excel, replace the example rows with your people, save as CSV.</span></p>';
-		echo '<p>For many attendees at once. The file needs a header row with the columns <code>given_name</code>, <code>family_name</code>, <code>email</code>; optional: <code>title</code>, <code>team</code> (team name for the badge; overrides the field below). Separator <code>;</code> or <code>,</code>, UTF-8 or Windows-1250 (Excel). Nothing is created before you confirm the preview. People who are already in the system are skipped.</p>';
+		echo '<p>For many attendees at once. The file needs a header row with the columns <code>given_name</code>, <code>family_name</code>, <code>email</code>; optional: <code>title</code>, <code>badge</code> (text for the badge; overrides the field below). Separator <code>;</code> or <code>,</code>, UTF-8 or Windows-1250 (Excel). Nothing is created before you confirm the preview. People who are already in the system are skipped.</p>';
 		echo '<form method="post" enctype="multipart/form-data" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
 		wp_nonce_field( 'pretix_sync_comp_csv' );
 		echo '<input type="hidden" name="action" value="pretix_sync_comp_csv">';
@@ -112,7 +116,7 @@ class Pretix_Sync_Comp {
 		self::product_select( $products );
 		echo '</td></tr>';
 		echo '<tr><th>Reason / note</th><td><input type="text" name="note" style="width:100%" placeholder="e.g. Staff" required></td></tr>';
-		echo '<tr><th>Team name</th><td><input type="text" name="team_name" style="width:100%" placeholder="Default for rows without a team column (optional)"></td></tr>';
+		echo '<tr><th>Badge text</th><td><input type="text" name="team_name" style="width:100%" placeholder="Default for rows without a badge column (optional)"></td></tr>';
 		echo self::lang_row(); // phpcs:ignore WordPress.Security.EscapeOutput
 		echo '<tr><th>Pass only</th><td>' . self::pass_only_checkbox() . '</td></tr>'; // phpcs:ignore WordPress.Security.EscapeOutput
 		echo '<tr><th>CSV file</th><td><input type="file" name="csv_file" accept=".csv,.txt,text/csv"></td></tr>';
@@ -192,7 +196,7 @@ class Pretix_Sync_Comp {
 		$order->update_meta_data( '_pretix_sync_complimentary', $note );
 		if ( '' !== $team ) {
 			// Same key the checkout field uses, so the badge logic does not need to know the order's origin.
-			$order->update_meta_data( 'team_name', $team );
+			$order->update_meta_data( Pretix_Sync_Fields::BADGE_META, $team );
 		}
 		if ( $pass_only ) {
 			$order->update_meta_data( Pretix_Sync_Attendees::PASS_ONLY_META, 'yes' );
@@ -324,6 +328,7 @@ class Pretix_Sync_Comp {
 			'csaladnev'   => 'family_name',
 			'email'       => 'email',
 			'e_mail'      => 'email',
+			'badge'       => 'team',
 			'team'        => 'team',
 			'team_name'   => 'team',
 			'csapat'      => 'team',
@@ -560,7 +565,7 @@ class Pretix_Sync_Comp {
 		echo '<p><strong>' . esc_html( $product ? $product->get_name() : '?' ) . '</strong>' . ( $data['pass_only'] ? ' · <strong>pass only</strong> (no emails)' : ' · attendees <strong>will be emailed</strong>' ) . ' · ' . esc_html( $data['note'] ) . '</p>';
 		$dups = (int) $counts['dup_file'] + (int) $counts['dup_existing'];
 		echo '<p>' . (int) $counts['ok'] . ' to create, ' . $dups . ' skipped as duplicates, ' . (int) $counts['error'] . ' with errors. ' . ( $plan ? 'This makes ' . count( $plan ) . ' order(s).' : '' ) . '</p>'; // phpcs:ignore WordPress.Security.EscapeOutput
-		echo '<table class="widefat striped"><thead><tr><th>Row</th><th>Title</th><th>Given name</th><th>Family name</th><th>Email</th><th>Team</th><th>Result</th></tr></thead><tbody>';
+		echo '<table class="widefat striped"><thead><tr><th>Row</th><th>Title</th><th>Given name</th><th>Family name</th><th>Email</th><th>Badge text</th><th>Result</th></tr></thead><tbody>';
 		foreach ( $data['rows'] as $r ) {
 			echo '<tr><td>' . (int) $r['line'] . '</td><td>' . esc_html( $r['title'] ) . '</td><td>' . esc_html( $r['given_name'] ) . '</td><td>' . esc_html( $r['family_name'] ) . '</td><td>' . esc_html( $r['email'] ) . '</td><td>' . esc_html( $r['team'] ) . '</td>';
 			echo '<td><strong style="color:' . esc_attr( $colors[ $r['status'] ] ) . '">' . esc_html( $labels[ $r['status'] ] ) . '</strong>' . ( $r['message'] ? ' – ' . esc_html( $r['message'] ) : '' ) . '</td></tr>';

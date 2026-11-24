@@ -54,6 +54,8 @@ class Pretix_Sync_Checkout {
 			: esc_html__( 'Please enter the details of each attendee. Every attendee receives their own email with their pass.', 'pretix-sync' )
 		) . '</p>';
 
+		Pretix_Sync_Fields::render_order_fields();
+
 		$n = 0;
 		foreach ( $items as $key => $info ) {
 			for ( $i = 0; $i < $info['qty']; $i++ ) {
@@ -87,6 +89,7 @@ class Pretix_Sync_Checkout {
 					'required' => true,
 					'class'    => array( 'form-row-wide' ),
 				), self::posted( $key, $i, 'email' ) );
+				Pretix_Sync_Fields::render_attendee_fields( $key, $i );
 				echo '</fieldset>';
 			}
 		}
@@ -98,6 +101,7 @@ class Pretix_Sync_Checkout {
 		if ( ! $items ) {
 			return;
 		}
+		Pretix_Sync_Fields::validate_order_fields( $errors );
 		$seen = array();
 		$n    = 0;
 		foreach ( $items as $key => $info ) {
@@ -122,6 +126,7 @@ class Pretix_Sync_Checkout {
 				} else {
 					$seen[ $email ] = $label;
 				}
+				Pretix_Sync_Fields::validate_attendee_fields( $errors, $label, $key, $i );
 			}
 		}
 	}
@@ -137,6 +142,7 @@ class Pretix_Sync_Checkout {
 				'given_name'  => self::posted( $cart_item_key, $i, 'given_name' ),
 				'family_name' => self::posted( $cart_item_key, $i, 'family_name' ),
 				'email'       => strtolower( self::posted( $cart_item_key, $i, 'email' ) ),
+				'custom'      => Pretix_Sync_Fields::attendee_values( $cart_item_key, $i ),
 				'status'      => 'new',
 			);
 		}
@@ -146,9 +152,22 @@ class Pretix_Sync_Checkout {
 	public static function flag_order( $order, $data ) {
 		foreach ( self::ticket_cart_items() as $info ) {
 			$order->update_meta_data( Pretix_Sync_Attendees::ORDER_FLAG, 'yes' );
+			Pretix_Sync_Fields::save_order_fields( $order );
 			Pretix_Sync_I18n::stamp_order( $order );
 			return;
 		}
+	}
+
+	/** " (Label: value, ...)" for the attendee-level custom fields that have a value. */
+	private static function custom_text( $a ) {
+		$bits = array();
+		foreach ( Pretix_Sync_Fields::of_scope( 'attendee' ) as $f ) {
+			$v = Pretix_Sync_Fields::display_value( $f, isset( $a['custom'][ $f['key'] ] ) ? $a['custom'][ $f['key'] ] : '' );
+			if ( '' !== $v ) {
+				$bits[] = Pretix_Sync_Fields::tr( $f['label'] ) . ': ' . $v;
+			}
+		}
+		return $bits ? ' (' . implode( ', ', $bits ) . ')' : '';
 	}
 
 	public static function display_item( $item_id, $item, $order, $plain_text = false ) {
@@ -159,13 +178,13 @@ class Pretix_Sync_Checkout {
 		if ( $plain_text ) {
 			echo "\n" . esc_html__( 'Attendees:', 'pretix-sync' ) . "\n";
 			foreach ( $list as $a ) {
-				echo '- ' . esc_html( Pretix_Sync_Attendees::full_name( $a ) . ' <' . $a['email'] . '>' ) . "\n";
+				echo '- ' . esc_html( Pretix_Sync_Attendees::full_name( $a ) . ' <' . $a['email'] . '>' . self::custom_text( $a ) ) . "\n";
 			}
 			return;
 		}
 		echo '<div class="pretix-sync-attendee-list" style="margin-top:.5em"><strong>' . esc_html__( 'Attendees:', 'pretix-sync' ) . '</strong><ul style="margin:.2em 0 0 1.2em">';
 		foreach ( $list as $a ) {
-			echo '<li>' . esc_html( Pretix_Sync_Attendees::full_name( $a ) ) . ' – ' . esc_html( $a['email'] ) . '</li>';
+			echo '<li>' . esc_html( Pretix_Sync_Attendees::full_name( $a ) ) . ' – ' . esc_html( $a['email'] . self::custom_text( $a ) ) . '</li>';
 		}
 		echo '</ul></div>';
 	}

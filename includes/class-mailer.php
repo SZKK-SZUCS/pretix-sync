@@ -65,18 +65,55 @@ class Pretix_Sync_Mailer {
 			array(
 				'title' => 'Emails',
 				'type'  => 'title',
-				'desc'  => 'Leave a field empty to use the default text (shown greyed out; Hungarian default included). Placeholders: <code>{name}</code> <code>{event_name}</code> <code>{buyer_note}</code> <code>{register_url}</code> <code>{pwreset_url}</code> <code>{account_note}</code> <code>{registration_note}</code>. HTML is allowed in the body.'
+				'desc'  => 'The fields hold the default texts (in the language of your admin screen) – edit them freely. A field left unchanged keeps following the language of each order (English / Hungarian); clear a field and save to restore the default. A changed text is sent as it is for every language' . ( Pretix_Sync_I18n::polylang_active() ? '' : ' (use Polylang to translate it)' ) . '. Placeholders: <code>{name}</code> <code>{event_name}</code> <code>{buyer_note}</code> <code>{register_url}</code> <code>{pwreset_url}</code> <code>{account_note}</code> <code>{registration_note}</code>. HTML is allowed in the body.'
 					. ( Pretix_Sync_I18n::polylang_active() ? ' <strong>Texts you enter here are translated under Languages → Translations (group “Pretix Sync”).</strong>' : '' ),
 				'id'    => 'pretix_sync_emails',
 			),
 		);
 		foreach ( self::defaults() as $type => $d ) {
-			$fields[] = array( 'title' => $d['label'] . ': subject', 'id' => 'pretix_sync_mail_' . $type . '_subject', 'type' => 'text', 'default' => '', 'placeholder' => $d['subject'], 'css' => 'min-width:350px' );
-			$fields[] = array( 'title' => 'Heading', 'id' => 'pretix_sync_mail_' . $type . '_heading', 'type' => 'text', 'default' => '', 'placeholder' => $d['heading'], 'css' => 'min-width:350px' );
-			$fields[] = array( 'title' => 'Body', 'id' => 'pretix_sync_mail_' . $type . '_body', 'type' => 'textarea', 'default' => '', 'placeholder' => $d['body'], 'css' => 'min-width:350px;height:160px;font-family:monospace' );
+			$fields[] = array( 'title' => $d['label'] . ': subject', 'id' => 'pretix_sync_mail_' . $type . '_subject', 'type' => 'text', 'default' => $d['subject'], 'css' => 'min-width:350px' );
+			$fields[] = array( 'title' => 'Heading', 'id' => 'pretix_sync_mail_' . $type . '_heading', 'type' => 'text', 'default' => $d['heading'], 'css' => 'min-width:350px' );
+			$fields[] = array( 'title' => 'Body', 'id' => 'pretix_sync_mail_' . $type . '_body', 'type' => 'textarea', 'default' => $d['body'], 'css' => 'min-width:350px;height:160px;font-family:monospace' );
 		}
 		$fields[] = array( 'type' => 'sectionend', 'id' => 'pretix_sync_emails' );
 		return $fields;
+	}
+
+	/** Normalised for comparing a posted text with a default (textareas post CRLF). */
+	private static function norm( $s ) {
+		return trim( str_replace( "
+", "
+", (string) $s ) );
+	}
+
+	/**
+	 * Settings screen: a field that was never edited (stored empty) is shown with the default text as its real,
+	 * editable value, not as a placeholder.
+	 */
+	public static function show_defaults() {
+		foreach ( self::defaults() as $type => $d ) {
+			foreach ( array( 'subject', 'heading', 'body' ) as $field ) {
+				$default = $d[ $field ];
+				add_filter( 'option_pretix_sync_mail_' . $type . '_' . $field, function ( $v ) use ( $default ) {
+					return '' === trim( (string) $v ) ? $default : $v;
+				} );
+			}
+		}
+	}
+
+	/**
+	 * Saving: a text still equal to the default is stored as empty, so it keeps following the order's language
+	 * instead of being frozen in the admin's language.
+	 */
+	public static function store_defaults_as_empty() {
+		foreach ( self::defaults() as $type => $d ) {
+			foreach ( array( 'subject', 'heading', 'body' ) as $field ) {
+				$default = self::norm( $d[ $field ] );
+				add_filter( 'woocommerce_admin_settings_sanitize_option_pretix_sync_mail_' . $type . '_' . $field, function ( $v ) use ( $default ) {
+					return self::norm( $v ) === $default ? '' : $v;
+				} );
+			}
+		}
 	}
 
 	/**

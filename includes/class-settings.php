@@ -183,17 +183,22 @@ class Pretix_Sync_Settings {
 	}
 
 	public static function render() {
+		Pretix_Sync_Mailer::show_defaults();
 		woocommerce_admin_fields( self::fields() );
+		Pretix_Sync_Fields::render_editor();
 		if ( self::sessions_enabled() ) {
 		echo '<h2>pretix webhook</h2><p>Create a webhook in pretix (Organizer → Webhooks) with this target URL:</p>';
 		echo '<p><input type="text" readonly style="width:100%;max-width:900px" value="' . esc_attr( self::webhook_url() ) . '" onclick="this.select()"></p>';
 		echo '<p>Events: <em>Order placed, Order marked as paid, Order canceled, Order reactivated, Order changed (all), Order modified</em>. Limit it to the sessions event.</p>';
 		}
+		echo '<p>' . esc_html__( 'How every setting and the webhook work is explained under the Webhook section of the Pretix Sync page.', 'pretix-sync' ) . '</p>';
 		echo '<p>Tools (open registration, pass export, connection test): <a href="' . esc_url( admin_url( 'admin.php?page=pretix-sync' ) ) . '">WooCommerce → Pretix Sync</a></p>';
 	}
 
 	public static function save() {
+		Pretix_Sync_Mailer::store_defaults_as_empty();
 		woocommerce_update_options( self::fields() );
+		Pretix_Sync_Fields::save_from_post();
 	}
 
 	/* ---------- product flag ---------- */
