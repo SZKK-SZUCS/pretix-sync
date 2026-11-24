@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<ruleset name="pretix-sync">
+    <description>WordPress Coding Standards a pretix-sync pluginhoz</description>
+
+    <file>pretix-sync.php</file>
+    <file>includes</file>
+    <exclude-pattern>/vendor/*</exclude-pattern>
+    <exclude-pattern>/node_modules/*</exclude-pattern>
+    <exclude-pattern>/tools/*</exclude-pattern>
+
+    <arg value="sp"/>
+    <arg name="basepath" value="."/>
+    <arg name="colors"/>
+    <arg name="extensions" value="php"/>
+
+    <rule ref="WordPress"/>
+</ruleset>

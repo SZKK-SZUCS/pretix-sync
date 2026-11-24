@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Pretix Sync
  * Description:       Connects WooCommerce ticket sales with pretix: per-attendee checkout fields, pretix customer accounts, memberships and one reusable QR pass per attendee for session check-in.
- * Version:           1.2.0
+ * Version:           2.0.0
  * Requires at least: 6.2
  * Requires PHP:      7.4
  * Requires Plugins:  woocommerce
@@ -14,10 +14,15 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'PRETIX_SYNC_VERSION', '1.2.0' );
+define( 'PRETIX_SYNC_VERSION', '2.0.0' );
 define( 'PRETIX_SYNC_FILE', __FILE__ );
 define( 'PRETIX_SYNC_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PRETIX_SYNC_AS_GROUP', 'pretix-sync' );
+
+// Composer autoloader (Plugin Update Checker). The release zip ships it; a source checkout needs `composer install`.
+if ( file_exists( PRETIX_SYNC_DIR . 'vendor/autoload.php' ) ) {
+	require_once PRETIX_SYNC_DIR . 'vendor/autoload.php';
+}
 
 // HPOS + cart/checkout blocks compatibility declaration.
 add_action( 'before_woocommerce_init', function () {
@@ -79,4 +84,18 @@ function pretix_sync_enqueue( $hook, $args ) {
 		return;
 	}
 	as_enqueue_async_action( $hook, $args, PRETIX_SYNC_AS_GROUP );
+}
+
+// Self-update from the GitHub releases of this plugin (the release zip asset).
+if ( class_exists( '\YahnisElsts\PluginUpdateChecker\v5\PucFactory' ) ) {
+	$pretix_sync_update_checker = \YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
+		'https://github.com/SZKK-SZUCS/pretix-sync',
+		__FILE__,
+		'pretix-sync'
+	);
+	$pretix_sync_update_checker->setBranch( 'main' );
+	$pretix_sync_vcs_api = $pretix_sync_update_checker->getVcsApi();
+	if ( method_exists( $pretix_sync_vcs_api, 'enableReleaseAssets' ) ) { // GitHub only; picks the release zip asset
+		$pretix_sync_vcs_api->enableReleaseAssets( '/\.zip$/i' );
+	}
 }

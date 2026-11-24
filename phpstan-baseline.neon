@@ -1,0 +1,136 @@
+parameters:
+	ignoreErrors:
+		-
+			message: "#^Call to method get_name\\(\\) on an unknown class WC_Order_Item_Product\\.$#"
+			count: 2
+			path: includes/class-admin.php
+
+		-
+			message: "#^Class WC_Order not found\\.$#"
+			count: 1
+			path: includes/class-admin.php
+
+		-
+			message: "#^Function wc_get_order not found\\.$#"
+			count: 4
+			path: includes/class-admin.php
+
+		-
+			message: "#^Function wc_get_page_id not found\\.$#"
+			count: 1
+			path: includes/class-admin.php
+
+		-
+			message: "#^Function wc_get_orders not found\\.$#"
+			count: 1
+			path: includes/class-attendees.php
+
+		-
+			message: "#^Method Pretix_Sync_Attendees\\:\\:for_order\\(\\) has invalid return type WC_Order_Item_Product\\.$#"
+			count: 1
+			path: includes/class-attendees.php
+
+		-
+			message: "#^Function WC not found\\.$#"
+			count: 2
+			path: includes/class-checkout.php
+
+		-
+			message: "#^Function woocommerce_form_field not found\\.$#"
+			count: 4
+			path: includes/class-checkout.php
+
+		-
+			message: "#^Function wc_create_order not found\\.$#"
+			count: 1
+			path: includes/class-comp.php
+
+		-
+			message: "#^Function wc_get_order not found\\.$#"
+			count: 1
+			path: includes/class-comp.php
+
+		-
+			message: "#^Function wc_get_product not found\\.$#"
+			count: 4
+			path: includes/class-comp.php
+
+		-
+			message: "#^Function wc_get_products not found\\.$#"
+			count: 1
+			path: includes/class-comp.php
+
+		-
+			message: "#^Function pll_current_language not found\\.$#"
+			count: 1
+			path: includes/class-i18n.php
+
+		-
+			message: "#^Function pll_languages_list not found\\.$#"
+			count: 3
+			path: includes/class-i18n.php
+
+		-
+			message: "#^Function pll_register_string not found\\.$#"
+			count: 2
+			path: includes/class-i18n.php
+
+		-
+			message: "#^Call to method style_inline\\(\\) on an unknown class WC_Email\\.$#"
+			count: 1
+			path: includes/class-mailer.php
+
+		-
+			message: "#^Function WC not found\\.$#"
+			count: 1
+			path: includes/class-mailer.php
+
+		-
+			message: "#^Instantiated class WC_Email not found\\.$#"
+			count: 1
+			path: includes/class-mailer.php
+
+		-
+			message: "#^Function woocommerce_admin_fields not found\\.$#"
+			count: 1
+			path: includes/class-settings.php
+
+		-
+			message: "#^Function woocommerce_update_options not found\\.$#"
+			count: 1
+			path: includes/class-settings.php
+
+		-
+			message: "#^Function woocommerce_wp_checkbox not found\\.$#"
+			count: 1
+			path: includes/class-settings.php
+
+		-
+			message: "#^Function woocommerce_wp_text_input not found\\.$#"
+			count: 2
+			path: includes/class-settings.php
+
+		-
+			message: "#^Function as_schedule_single_action not found\\.$#"
+			count: 1
+			path: includes/class-sync.php
+
+		-
+			message: "#^Function wc_get_order not found\\.$#"
+			count: 5
+			path: includes/class-sync.php
+
+		-
+			message: "#^Function as_enqueue_async_action not found\\.$#"
+			count: 1
+			path: includes/class-webhook.php
+
+		-
+			message: "#^Function as_schedule_single_action not found\\.$#"
+			count: 1
+			path: includes/class-webhook.php
+
+		-
+			message: "#^Function as_enqueue_async_action not found\\.$#"
+			count: 1
+			path: pretix-sync.php

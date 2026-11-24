@@ -1,0 +1,57 @@
+name: Build and Release Pretix Sync
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The plugin header version is what WordPress compares, the tag is what the update checker reads.
+      # If they differ, the auto-update silently never starts.
+      - name: Check that the tag matches the plugin version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          HEADER="$(grep -m1 -E '^[[:space:]]*\*[[:space:]]*Version:' pretix-sync.php | sed -E 's/.*Version:[[:space:]]*//' | tr -d '[:space:]')"
+          CONST="$(grep -m1 "define( 'PRETIX_SYNC_VERSION'" pretix-sync.php | sed -E "s/.*'([0-9][^']*)'.*/\1/")"
+          echo "tag=$TAG header=$HEADER constant=$CONST"
+          if [ "$TAG" != "$HEADER" ] || [ "$TAG" != "$CONST" ]; then
+            echo "::error::Tag ($TAG), plugin header ($HEADER) and PRETIX_SYNC_VERSION ($CONST) must be the same."
+            exit 1
+          fi
+
+      # Fails when a string is missing from a translation, and rebuilds the .mo files.
+      - name: Check translations
+        run: python3 tools/build-i18n.py
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.0"
+          tools: composer
+
+      - name: Install production dependencies
+        run: composer install --no-dev --optimize-autoloader --no-interaction
+
+      - name: Package
+        # The folder inside the zip must be the plugin slug, whatever the repository is called.
+        run: |
+          mkdir -p dist/pretix-sync
+          rsync -a --exclude-from=.distignore ./ dist/pretix-sync/
+          cd dist && zip -r pretix-sync.zip pretix-sync
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/pretix-sync.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
