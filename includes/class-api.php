@@ -75,9 +75,12 @@ class Pretix_Sync_API {
 			'Customers (organizer)'      => array( self::org() . 'customers/', array( 'email' => 'connection-test@invalid.invalid' ) ),
 			'Memberships (organizer)'    => array( self::org() . 'memberships/', array( 'membership_type' => (string) (int) Pretix_Sync_Settings::get( 'membership_type' ) ) ),
 			'Reusable media (organizer)' => array( self::org() . 'reusablemedia/', array( 'type' => 'barcode' ) ),
-			'Lectures event'             => array( self::ev(), array() ),
-			'Orders (lectures event)'    => array( self::ev() . 'orders/', array( 'code' => 'XXXXX' ) ),
+			'Sessions event'             => array( self::ev(), array() ),
+			'Orders (sessions event)'    => array( self::ev() . 'orders/', array( 'code' => 'XXXXX' ) ),
 		);
+		if ( ! Pretix_Sync_Settings::sessions_enabled() ) {
+			unset( $checks['Customers (organizer)'], $checks['Memberships (organizer)'], $checks['Sessions event'], $checks['Orders (sessions event)'] );
+		}
 		if ( Pretix_Sync_Settings::passes_enabled() ) {
 			$checks['Passes event']            = array( self::pev(), array() );
 			$checks['Orders (passes event)']   = array( self::pev() . 'orders/', array( 'code' => 'XXXXX' ) );
@@ -99,7 +102,12 @@ class Pretix_Sync_API {
 			}
 			$result[ $label ] = $r;
 		}
-		$result['event'] = $result['Lectures event'];
+		foreach ( array( 'Sessions event', 'Passes event' ) as $k ) {
+			if ( isset( $result[ $k ] ) ) {
+				$result['event'] = $result[ $k ];
+				break;
+			}
+		}
 		return $result;
 	}
 
@@ -141,7 +149,7 @@ class Pretix_Sync_API {
 
 	/**
 	 * Memberships cannot be deleted or canceled via the API ("You can change the date instead").
-	 * Moving date_end before date_start makes it invalid for every lecture.
+	 * Moving date_end before date_start makes it invalid for every session.
 	 */
 	public static function revoke_membership( $id ) {
 		$start = new DateTime( Pretix_Sync_Settings::get( 'valid_from' ) );
@@ -202,10 +210,10 @@ class Pretix_Sync_API {
 		return isset( $r['results'] ) ? $r['results'] : array();
 	}
 
-	/* ---------- lecture registrations (orders in the lectures event) ---------- */
+	/* ---------- session registrations (orders in the sessions event) ---------- */
 
 	private static function ev() {
-		return self::org() . 'events/' . rawurlencode( Pretix_Sync_Settings::get( 'talks_event' ) ) . '/';
+		return self::org() . 'events/' . rawurlencode( Pretix_Sync_Settings::get( 'sessions_event' ) ) . '/';
 	}
 
 	public static function get_order( $event_slug, $code ) {
@@ -259,9 +267,9 @@ class Pretix_Sync_API {
 	}
 
 	/**
-	 * All-access ticket in the LECTURES event (e.g. staff). It is not bought in the shop: the item is voucher-only
+	 * All-access ticket in the SESSIONS event (e.g. staff). It is not bought in the shop: the item is voucher-only
 	 * and has no sales channel, and the order API does not check either. It carries no customer account; the plugin
-	 * links its position to the attendee's pass directly, so the pass is accepted on the lecture check-in lists.
+	 * links its position to the attendee's pass directly, so the pass is accepted on the session check-in lists.
 	 */
 	public static function create_all_access_order( $email, $item_id, $name_parts, $comment, $company = '' ) {
 		return self::request( 'POST', self::ev() . 'orders/', self::free_order_body( $email, $item_id, $name_parts, $comment, $company ) );

@@ -5,7 +5,7 @@ defined( 'ABSPATH' ) || exit;
  * WooCommerce → pretix synchronisation.
  *
  * Phase 1 (always, right after payment): one reusable medium (the pass QR) per attendee + "ticket" email.
- * Phase 2 (once lecture registration is open): pretix customer account + membership, medium linked to the
+ * Phase 2 (once session registration is open): pretix customer account + membership, medium linked to the
  *          customer, "open"/"welcome" email.
  * Every step stores its result immediately, so a re-run only does what is still missing.
  */
@@ -80,7 +80,7 @@ class Pretix_Sync_Sync {
 		}
 
 		if ( $done ) {
-			$what = Pretix_Sync_Attendees::is_pass_only( $order ) ? 'pass only' : ( $open ? 'pass + lecture registration' : 'pass' );
+			$what = Pretix_Sync_Attendees::is_pass_only( $order ) ? 'pass only' : ( $open ? 'pass + session registration' : 'pass' );
 			$order->add_order_note( sprintf( 'pretix: %s synced (%s): %s', $what, count( $done ), implode( ', ', $done ) ) );
 		}
 		if ( $errors ) {
@@ -132,14 +132,14 @@ class Pretix_Sync_Sync {
 			return $fail( $err );
 		}
 
-		// Phase 1c: free all-access ticket in the lectures event (staff), linked to the pass.
+		// Phase 1c: free all-access ticket in the sessions event (staff), linked to the pass.
 		$err = self::sync_all_access_ticket( $order, $item, $a, $save );
 		if ( $err ) {
 			return $fail( $err );
 		}
 
 		// Pass-only attendees (e.g. staff who get their pass handed over at the venue) stop here on purpose: no
-		// email, no pretix account, no membership, no lecture registration - also after registration opens.
+		// email, no pretix account, no membership, no session registration - also after registration opens.
 		if ( Pretix_Sync_Attendees::is_pass_only( $order ) ) {
 			$a['status'] = 'passonly';
 			$save();
@@ -252,8 +252,8 @@ class Pretix_Sync_Sync {
 	}
 
 	/**
-	 * Staff: a free all-access ticket in the lectures event, linked straight to the attendee's pass. The lecture
-	 * check-in lists then accept the pass at every lecture. Only for products with an all-access item ID set.
+	 * Staff: a free all-access ticket in the sessions event, linked straight to the attendee's pass. The session
+	 * check-in lists then accept the pass at every session. Only for products with an all-access item ID set.
 	 * It needs no pretix account: the link is made here, not by the webhook (which works through the account).
 	 *
 	 * @return WP_Error|null
@@ -297,7 +297,7 @@ class Pretix_Sync_Sync {
 	 * Writes the team name to the badge ticket's "company" field when it differs from what was written last.
 	 *
 	 * Only transient errors are returned (the queue retries them). Any other failure is already in the log and is
-	 * deliberately not fatal: the team name is cosmetic and must not block the lecture registration. The stored
+	 * deliberately not fatal: the team name is cosmetic and must not block the session registration. The stored
 	 * value stays unchanged, so the next sync tries again.
 	 *
 	 * @return WP_Error|null
@@ -343,7 +343,7 @@ class Pretix_Sync_Sync {
 			}
 		}
 		if ( $done ) {
-			$order->add_order_note( 'pretix: revoked pass / lecture registrations for ' . implode( ', ', $done ) );
+			$order->add_order_note( 'pretix: revoked pass / session registrations for ' . implode( ', ', $done ) );
 		}
 		if ( $errors ) {
 			$order->add_order_note( "pretix revoke ERROR:\n" . implode( "\n", $errors ) );
@@ -355,7 +355,7 @@ class Pretix_Sync_Sync {
 	}
 
 	/**
-	 * Cancels the attendee's lecture registrations, invalidates the membership and deactivates the pass.
+	 * Cancels the attendee's session registrations, invalidates the membership and deactivates the pass.
 	 *
 	 * @return WP_Error|null
 	 */
@@ -364,7 +364,7 @@ class Pretix_Sync_Sync {
 			Pretix_Sync_Attendees::save( $item, $index, $a );
 		};
 
-		// 1. Lecture registrations – unless the same pretix account still holds another valid ticket.
+		// 1. Session registrations – unless the same pretix account still holds another valid ticket.
 		if ( ! empty( $a['customer_id'] ) && empty( $a['regs_canceled'] ) ) {
 			$key = Pretix_Sync_Attendees::key( $order, $item, $index );
 			if ( ! self::customer_has_other_ticket( $a['customer_id'], $key ) ) {
@@ -421,7 +421,7 @@ class Pretix_Sync_Sync {
 			$save();
 		}
 
-		// 3b. All-access ticket in the lectures event (staff).
+		// 3b. All-access ticket in the sessions event (staff).
 		if ( ! empty( $a['all_access_order'] ) && empty( $a['all_access_canceled'] ) ) {
 			$r = Pretix_Sync_API::cancel_all_access_order( $a['all_access_order'] );
 			if ( is_wp_error( $r ) ) {
@@ -557,7 +557,7 @@ class Pretix_Sync_Sync {
 				return $r;
 			}
 		}
-		return 'Attendee name updated (membership, pass label and badge ticket). Lecture registrations made before this change keep the old name in pretix.';
+		return 'Attendee name updated (membership, pass label and badge ticket). Session registrations made before this change keep the old name in pretix.';
 	}
 
 	/* ---------- helpers ---------- */
@@ -571,7 +571,7 @@ class Pretix_Sync_Sync {
 		);
 	}
 
-	/** Open lecture registration: flag + queue every paid order. */
+	/** Open session registration: flag + queue every paid order. */
 	public static function open_registration() {
 		update_option( 'pretix_sync_registration_open', 'yes' );
 		update_option( 'pretix_sync_registration_opened_at', time() );

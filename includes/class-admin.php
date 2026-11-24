@@ -68,11 +68,15 @@ class Pretix_Sync_Admin {
 		echo '<div class="wrap"><h1>Pretix Sync</h1>';
 
 		echo '<h2>Status</h2><table class="widefat striped" style="max-width:600px"><tbody>';
-		echo '<tr><td>Lecture registration</td><td>' . ( $open ? '<strong style="color:#008a20">OPEN</strong> since ' . esc_html( wp_date( 'Y-m-d H:i', (int) get_option( 'pretix_sync_registration_opened_at' ) ) ) : '<strong>not open yet</strong>' ) . '</td></tr>';
+		if ( Pretix_Sync_Settings::sessions_enabled() ) {
+			echo '<tr><td>Session registration</td><td>' . ( $open ? '<strong style="color:#008a20">OPEN</strong> since ' . esc_html( wp_date( 'Y-m-d H:i', (int) get_option( 'pretix_sync_registration_opened_at' ) ) ) : '<strong>not open yet</strong>' ) . '</td></tr>';
+		}
 		echo '<tr><td>Orders with attendees</td><td>' . (int) $s['orders'] . '</td></tr>';
 		echo '<tr><td>Attendees</td><td>' . (int) $s['attendees'] . '</td></tr>';
 		echo '<tr><td>… pass created (waiting for registration opening)</td><td>' . (int) $s['pass'] . '</td></tr>';
-		echo '<tr><td>… pass + lecture registration right</td><td>' . (int) $s['registered'] . '</td></tr>';
+		if ( Pretix_Sync_Settings::sessions_enabled() ) {
+			echo '<tr><td>… pass + session registration right</td><td>' . (int) $s['registered'] . '</td></tr>';
+		}
 		echo '<tr><td>… pass only (no emails, no account – e.g. staff)</td><td>' . (int) $s['passonly'] . '</td></tr>';
 		echo '<tr><td>… not synced yet</td><td>' . (int) $s['new'] . '</td></tr>';
 		echo '<tr><td>… error</td><td>' . ( $s['error'] ? '<strong style="color:#d63638">' . (int) $s['error'] . '</strong>' : '0' ) . '</td></tr>';
@@ -84,20 +88,28 @@ class Pretix_Sync_Admin {
 		self::tool_button( 'test', 'Test pretix connection' );
 		self::tool_button( 'export', 'Download pass list (CSV)' );
 		self::tool_button( 'resync_all', 'Re-run sync for all orders (also creates missing badge tickets and updates team names)' );
-		self::tool_button( 'reconcile', 'Re-link all lecture registrations to passes' );
+		if ( Pretix_Sync_Settings::sessions_enabled() ) {
+			self::tool_button( 'reconcile', 'Re-link all session registrations to passes' );
+		}
 
-		echo '<h2>Lecture registration</h2>';
+		if ( Pretix_Sync_Settings::sessions_enabled() ) {
+		echo '<h2>Session registration</h2>';
 		if ( ! $open ) {
-			echo '<p>Opening creates a pretix account and membership for every attendee (new accounts get an activation email) and sends everyone the “Lecture registration is now open” email. Make sure all lectures are set up in pretix and the pretix shop is <strong>live</strong> first.</p>';
-			self::tool_button( 'open', 'Open lecture registration now', 'button button-primary', 'Open lecture registration and email all ' . $s['attendees'] . ' attendees?' );
+			echo '<p>Opening creates a pretix account and membership for every attendee (new accounts get an activation email) and sends everyone the “Session registration is now open” email. Make sure all sessions are set up in pretix and the pretix shop is <strong>live</strong> first.</p>';
+			self::tool_button( 'open', 'Open session registration now', 'button button-primary', 'Open session registration and email all ' . $s['attendees'] . ' attendees?' );
 		} else {
 			echo '<p>Registration is open. New ticket buyers get their account and the registration email immediately.</p>';
 			self::tool_button( 'close', 'Mark as not open (no emails are sent)', 'button', 'Only new purchases are affected. Continue?' );
 		}
+		}
 
-		Pretix_Sync_Comp::render_form();
+		if ( Pretix_Sync_Settings::staff_enabled() ) {
+			Pretix_Sync_Comp::render_form();
+		}
 
-		echo '<h2>Webhook</h2><p>Target URL for the pretix webhook (Organizer → Webhooks):</p><p><input type="text" readonly style="width:100%;max-width:900px" value="' . esc_attr( Pretix_Sync_Settings::webhook_url() ) . '" onclick="this.select()"></p>';
+		if ( Pretix_Sync_Settings::sessions_enabled() ) {
+			echo '<h2>Webhook</h2><p>Target URL for the pretix webhook (Organizer → Webhooks):</p><p><input type="text" readonly style="width:100%;max-width:900px" value="' . esc_attr( Pretix_Sync_Settings::webhook_url() ) . '" onclick="this.select()"></p>';
+		}
 		echo '<p>Settings: <a href="' . esc_url( admin_url( 'admin.php?page=wc-settings&tab=pretix_sync' ) ) . '">WooCommerce → Settings → Pretix Sync</a> · Logs: WooCommerce → Status → Logs (source <code>pretix-sync</code>) · Queue: Tools → Scheduled Actions (group <code>pretix-sync</code>)</p>';
 		echo '</div>';
 	}
@@ -112,7 +124,7 @@ class Pretix_Sync_Admin {
 		switch ( $tool ) {
 			case 'test':
 				$r   = Pretix_Sync_API::test();
-				$msg = is_wp_error( $r ) ? 'Connection FAILED: ' . $r->get_error_message() : 'Connection OK (customers, memberships, reusable media, orders). Event: ' . self::i18n( $r['event']['name'] ) . ( ! empty( $r['event']['live'] ) ? ' (live)' : ' (not live)' ) . ( ! empty( $r['event']['testmode'] ) ? ' (test mode)' : '' );
+				$msg = is_wp_error( $r ) ? 'Connection FAILED: ' . $r->get_error_message() : 'Connection OK (customers, memberships, reusable media, orders). Event: ' . ( isset( $r['event'] ) ? self::i18n( $r['event']['name'] ) . ( ! empty( $r['event']['live'] ) ? ' (live)' : ' (not live)' ) . ( ! empty( $r['event']['testmode'] ) ? ' (test mode)' : '' ) : 'n/a (no event configured)' );
 				break;
 			case 'export':
 				self::export_csv();
@@ -127,15 +139,15 @@ class Pretix_Sync_Admin {
 				break;
 			case 'reconcile':
 				Pretix_Sync_Webhook::start_reconcile();
-				$msg = 'Re-linking of all lecture registrations queued.';
+				$msg = 'Re-linking of all session registrations queued.';
 				break;
 			case 'open':
 				$n   = Pretix_Sync_Sync::open_registration();
-				$msg = "Lecture registration opened. $n orders queued – emails go out in the background over the next minutes.";
+				$msg = "Session registration opened. $n orders queued – emails go out in the background over the next minutes.";
 				break;
 			case 'close':
 				update_option( 'pretix_sync_registration_open', 'no' );
-				$msg = 'Lecture registration marked as not open.';
+				$msg = 'Session registration marked as not open.';
 				break;
 		}
 		wp_safe_redirect( add_query_arg( 'pretix_sync_msg', rawurlencode( $msg ), admin_url( 'admin.php?page=pretix-sync' ) ) );
@@ -235,7 +247,7 @@ class Pretix_Sync_Admin {
 			echo '</td><td style="white-space:nowrap">';
 			if ( 'revoked' !== $st ) {
 				echo '<button type="submit" class="button" name="pretix_sync_action" value="save|' . esc_attr( $key ) . '">Save</button> ';
-				echo '<button type="submit" class="button" name="pretix_sync_action" value="revoke|' . esc_attr( $key ) . '" onclick="return confirm(\'Revoke this attendee? Their pass is deactivated and all lecture registrations are canceled.\')">Revoke</button>';
+				echo '<button type="submit" class="button" name="pretix_sync_action" value="revoke|' . esc_attr( $key ) . '" onclick="return confirm(\'Revoke this attendee? Their pass is deactivated and all session registrations are canceled.\')">Revoke</button>';
 			}
 			echo '</td></tr>';
 		}
@@ -270,7 +282,7 @@ class Pretix_Sync_Admin {
 
 		if ( 'revoke' === $verb ) {
 			$err = Pretix_Sync_Sync::revoke_attendee( $order, $row['item'], $row['index'], $a );
-			$order->add_order_note( $err ? "pretix revoke failed for $name: " . $err->get_error_message() : "pretix: attendee $name revoked (pass deactivated, lecture registrations canceled)." );
+			$order->add_order_note( $err ? "pretix revoke failed for $name: " . $err->get_error_message() : "pretix: attendee $name revoked (pass deactivated, session registrations canceled)." );
 			return;
 		}
 

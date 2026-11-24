@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name:       Pretix Sync
- * Description:       Connects WooCommerce ticket sales with pretix: per-attendee checkout fields, pretix customer accounts, memberships and one reusable QR pass per attendee for lecture check-in.
+ * Description:       Connects WooCommerce ticket sales with pretix: per-attendee checkout fields, pretix customer accounts, memberships and one reusable QR pass per attendee for session check-in.
  * Version:           1.2.0
  * Requires at least: 6.2
  * Requires PHP:      7.4

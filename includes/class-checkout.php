@@ -49,7 +49,10 @@ class Pretix_Sync_Checkout {
 		}
 		echo '<div id="pretix-sync-attendees" class="pretix-sync-attendees" style="margin:2em 0">';
 		echo '<h3>' . esc_html__( 'Attendee details', 'pretix-sync' ) . '</h3>';
-		echo '<p>' . esc_html__( 'Please enter the details of each attendee. Every attendee receives their own email with their pass and the lecture registration link.', 'pretix-sync' ) . '</p>';
+		echo '<p>' . ( Pretix_Sync_Settings::sessions_enabled()
+			? esc_html__( 'Please enter the details of each attendee. Every attendee receives their own email with their pass and the session registration link.', 'pretix-sync' )
+			: esc_html__( 'Please enter the details of each attendee. Every attendee receives their own email with their pass.', 'pretix-sync' )
+		) . '</p>';
 
 		$n = 0;
 		foreach ( $items as $key => $info ) {

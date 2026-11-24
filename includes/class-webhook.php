@@ -2,10 +2,10 @@
 defined( 'ABSPATH' ) || exit;
 
 /**
- * pretix webhook → keeps each attendee's pass (reusable medium) linked to their current lecture registrations.
+ * pretix webhook → keeps each attendee's pass (reusable medium) linked to their current session registrations.
  *
  * pretix does not attach web-shop registrations to an existing medium by itself, so on every change of an order
- * in the lectures event we recompute: medium.linked_orderpositions =
+ * in the sessions event we recompute: medium.linked_orderpositions =
  *     (current links – all positions of this order) ∪ (active positions of this order).
  */
 class Pretix_Sync_Webhook {
@@ -17,6 +17,9 @@ class Pretix_Sync_Webhook {
 	}
 
 	public static function routes() {
+		if ( ! Pretix_Sync_Settings::sessions_enabled() ) {
+			return; // no session registrations, nothing to link
+		}
 		register_rest_route( 'pretix-sync/v1', '/webhook', array(
 			'methods'             => 'POST',
 			'callback'            => array( __CLASS__, 'receive' ),
@@ -32,7 +35,7 @@ class Pretix_Sync_Webhook {
 		if ( empty( $p['event'] ) || empty( $p['code'] ) ) {
 			return new WP_REST_Response( array( 'ok' => true, 'ignored' => 'no order' ), 200 );
 		}
-		if ( $p['event'] !== Pretix_Sync_Settings::get( 'talks_event' ) ) {
+		if ( $p['event'] !== Pretix_Sync_Settings::get( 'sessions_event' ) ) {
 			return new WP_REST_Response( array( 'ok' => true, 'ignored' => 'other event' ), 200 );
 		}
 		// Payload only carries identifiers; the real state is fetched from the API when processing.
@@ -48,7 +51,7 @@ class Pretix_Sync_Webhook {
 				return;
 			}
 			pretix_sync_log( "Linking registration $code to pass failed: " . $err->get_error_message(), 'error' );
-			wp_mail( get_option( 'admin_email' ), '[Pretix Sync] Could not link lecture registration ' . $code, $err->get_error_message() );
+			wp_mail( get_option( 'admin_email' ), '[Pretix Sync] Could not link session registration ' . $code, $err->get_error_message() );
 		}
 	}
 
@@ -151,7 +154,7 @@ class Pretix_Sync_Webhook {
 			pretix_sync_log( 'Reconcile page ' . $page . ' failed: ' . $list->get_error_message(), 'error' );
 			return;
 		}
-		$event = Pretix_Sync_Settings::get( 'talks_event' );
+		$event = Pretix_Sync_Settings::get( 'sessions_event' );
 		foreach ( $list['results'] as $o ) {
 			$r = self::link_order( $event, $o['code'], $o );
 			if ( is_wp_error( $r ) ) {

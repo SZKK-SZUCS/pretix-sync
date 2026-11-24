@@ -6,9 +6,9 @@ defined( 'ABSPATH' ) || exit;
  *
  * Creates a WooCommerce order with the custom status "Complimentary" (wc-pretix-sync-comp). Invoicing plugins and
  * WooCommerce customer emails react to processing/completed, not to this status, so no (0 Ft) invoice is issued.
- * The attendees are synced to pretix exactly like paid ones (pass + lecture registration right) - unless the
+ * The attendees are synced to pretix exactly like paid ones (pass + session registration right) - unless the
  * "Pass only" option is ticked: then only the pass and badge ticket are created (no emails, no pretix account,
- * no lecture registration), e.g. for staff whose pass is handed over at the venue.
+ * no session registration), e.g. for staff whose pass is handed over at the venue.
  *
  * Attendees are entered in the grid (up to 5) or imported from a CSV file (preview first, then confirm).
  */
@@ -25,6 +25,9 @@ class Pretix_Sync_Comp {
 	public static function init() {
 		add_action( 'init', array( __CLASS__, 'register_status' ) );
 		add_filter( 'wc_order_statuses', array( __CLASS__, 'add_status' ) );
+		if ( ! Pretix_Sync_Settings::staff_enabled() ) {
+			return; // status stays registered so existing complimentary orders keep their label
+		}
 		add_action( 'admin_post_pretix_sync_comp', array( __CLASS__, 'handle' ) );
 		add_action( 'admin_post_pretix_sync_comp_csv', array( __CLASS__, 'handle_csv_preview' ) );
 		add_action( 'admin_post_pretix_sync_comp_csv_sample', array( __CLASS__, 'handle_csv_sample' ) );
@@ -66,7 +69,7 @@ class Pretix_Sync_Comp {
 	}
 
 	private static function pass_only_checkbox() {
-		return '<label><input type="checkbox" name="pass_only" value="1"> <strong>Pass only</strong> – no emails, no pretix account, no lecture registration (e.g. staff whose pass is handed out at the venue). Email is optional.</label>';
+		return '<label><input type="checkbox" name="pass_only" value="1"> <strong>Pass only</strong> – no emails, no pretix account, no session registration (e.g. staff whose pass is handed out at the venue). Email is optional.</label>';
 	}
 
 	public static function render_form() {

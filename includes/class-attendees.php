@@ -9,9 +9,9 @@ defined( 'ABSPATH' ) || exit;
  *   medium_id, medium_identifier                      – phase 1 (pass QR)
  *   pass_order, pass_position, pass_linked, pass_company – badge ticket in the passes event; pass_company is the
  *                                                       team name last written to it (to detect changes)
- *   customer_id, customer_new, membership_id          – phase 2 (lecture registration right)
+ *   customer_id, customer_new, membership_id          – phase 2 (session registration right)
  *   all_access_order, all_access_position, all_access_linked, all_access_canceled
- *                                                     – free all-access ticket in the lectures event (staff), linked to the pass
+ *                                                     – free all-access ticket in the sessions event (staff), linked to the pass
  *   status: new | pass | passonly | registered | revoked | error   (passonly = finished pass-only attendee)
  *   error                                             – last error message
  */
@@ -20,7 +20,7 @@ class Pretix_Sync_Attendees {
 	const ITEM_META  = '_pretix_sync_attendees';
 	const ORDER_FLAG = '_pretix_sync_has_attendees';
 
-	/** Order flag: "pass only" – pass and badge ticket only; no emails, no pretix account, no lecture registration. */
+	/** Order flag: "pass only" – pass and badge ticket only; no emails, no pretix account, no session registration. */
 	const PASS_ONLY_META = '_pretix_sync_pass_only';
 
 	public static function is_pass_only( $order ) {
