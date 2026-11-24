@@ -5,16 +5,19 @@ defined( 'ABSPATH' ) || exit;
  * Minimal pretix REST API client.
  *
  * Every method returns the decoded JSON array on success or a WP_Error.
- * WP_Error codes: 'fss_http_<status>' (data: status, body) or 'fss_network'.
+ * WP_Error codes: 'pretix_sync_http_<status>' (data: status, body) or 'pretix_sync_network'.
  */
-class FSS_Pretix_API {
+class Pretix_Sync_API {
 
 	private static function request( $method, $path, $body = null, $query = array() ) {
-		$token = FSS_Pretix_Settings::token();
+		$token = Pretix_Sync_Settings::token();
 		if ( ! $token ) {
-			return new WP_Error( 'fss_config', 'FSS_PRETIX_TOKEN is not defined in wp-config.php' );
+			return new WP_Error( 'pretix_sync_config', 'PRETIX_SYNC_TOKEN is not defined in wp-config.php' );
 		}
-		$url = FSS_Pretix_Settings::base_url() . '/api/v1/' . ltrim( $path, '/' );
+		if ( '' === Pretix_Sync_Settings::base_url() || '' === (string) Pretix_Sync_Settings::get( 'organizer' ) ) {
+			return new WP_Error( 'pretix_sync_config', 'pretix base URL and organizer slug are not set (WooCommerce → Settings → Pretix Sync).' );
+		}
+		$url = Pretix_Sync_Settings::base_url() . '/api/v1/' . ltrim( $path, '/' );
 		if ( $query ) {
 			$url = add_query_arg( array_map( 'rawurlencode', $query ), $url );
 		}
@@ -33,7 +36,7 @@ class FSS_Pretix_API {
 
 		$response = wp_remote_request( $url, $args );
 		if ( is_wp_error( $response ) ) {
-			return new WP_Error( 'fss_network', $response->get_error_message() );
+			return new WP_Error( 'pretix_sync_network', $response->get_error_message() );
 		}
 		$status = (int) wp_remote_retrieve_response_code( $response );
 		$raw    = wp_remote_retrieve_body( $response );
@@ -42,8 +45,8 @@ class FSS_Pretix_API {
 		if ( $status >= 200 && $status < 300 ) {
 			return is_array( $data ) ? $data : array();
 		}
-		fss_pretix_log( sprintf( '%s %s → %d %s', $method, $path, $status, $raw ), 'warning' );
-		return new WP_Error( 'fss_http_' . $status, sprintf( 'pretix API %s %s returned %d: %s', $method, $path, $status, wp_strip_all_tags( substr( $raw, 0, 500 ) ) ), array( 'status' => $status, 'body' => $data ) );
+		pretix_sync_log( sprintf( '%s %s → %d %s', $method, $path, $status, $raw ), 'warning' );
+		return new WP_Error( 'pretix_sync_http_' . $status, sprintf( 'pretix API %s %s returned %d: %s', $method, $path, $status, wp_strip_all_tags( substr( $raw, 0, 500 ) ) ), array( 'status' => $status, 'body' => $data ) );
 	}
 
 	/** True if the error is worth retrying later (network, 429, 5xx). */
@@ -51,7 +54,7 @@ class FSS_Pretix_API {
 		if ( ! is_wp_error( $error ) ) {
 			return false;
 		}
-		if ( 'fss_network' === $error->get_error_code() ) {
+		if ( 'pretix_sync_network' === $error->get_error_code() ) {
 			return true;
 		}
 		$data = $error->get_error_data();
@@ -60,7 +63,7 @@ class FSS_Pretix_API {
 	}
 
 	private static function org() {
-		return 'organizers/' . rawurlencode( FSS_Pretix_Settings::get( 'organizer' ) ) . '/';
+		return 'organizers/' . rawurlencode( Pretix_Sync_Settings::get( 'organizer' ) ) . '/';
 	}
 
 	/* ---------- connection test ---------- */
@@ -70,12 +73,12 @@ class FSS_Pretix_API {
 		// without organizer "Settings" access, so it is not queried).
 		$checks = array(
 			'Customers (organizer)'      => array( self::org() . 'customers/', array( 'email' => 'connection-test@invalid.invalid' ) ),
-			'Memberships (organizer)'    => array( self::org() . 'memberships/', array( 'membership_type' => (string) (int) FSS_Pretix_Settings::get( 'membership_type' ) ) ),
+			'Memberships (organizer)'    => array( self::org() . 'memberships/', array( 'membership_type' => (string) (int) Pretix_Sync_Settings::get( 'membership_type' ) ) ),
 			'Reusable media (organizer)' => array( self::org() . 'reusablemedia/', array( 'type' => 'barcode' ) ),
 			'Lectures event'             => array( self::ev(), array() ),
 			'Orders (lectures event)'    => array( self::ev() . 'orders/', array( 'code' => 'XXXXX' ) ),
 		);
-		if ( FSS_Pretix_Settings::passes_enabled() ) {
+		if ( Pretix_Sync_Settings::passes_enabled() ) {
 			$checks['Passes event']            = array( self::pev(), array() );
 			$checks['Orders (passes event)']   = array( self::pev() . 'orders/', array( 'code' => 'XXXXX' ) );
 		}
@@ -84,12 +87,12 @@ class FSS_Pretix_API {
 			$r = self::request( 'GET', $c[0], null, $c[1] );
 			if ( is_wp_error( $r ) ) {
 				$hint = '';
-				if ( 'fss_http_403' === $r->get_error_code() || 'fss_http_404' === $r->get_error_code() ) {
+				if ( 'pretix_sync_http_403' === $r->get_error_code() || 'pretix_sync_http_404' === $r->get_error_code() ) {
 					// Which organizer does this token actually belong to?
 					$orgs = self::request( 'GET', 'organizers/' );
 					if ( ! is_wp_error( $orgs ) ) {
 						$slugs = wp_list_pluck( isset( $orgs['results'] ) ? $orgs['results'] : array(), 'slug' );
-						$hint  = ' | The token belongs to organizer(s): ' . ( $slugs ? implode( ', ', $slugs ) : 'none' ) . ' (configured: ' . FSS_Pretix_Settings::get( 'organizer' ) . ')';
+						$hint  = ' | The token belongs to organizer(s): ' . ( $slugs ? implode( ', ', $slugs ) : 'none' ) . ' (configured: ' . Pretix_Sync_Settings::get( 'organizer' ) . ')';
 					}
 				}
 				return new WP_Error( $r->get_error_code(), $label . ': ' . $r->get_error_message() . $hint, $r->get_error_data() );
@@ -114,7 +117,7 @@ class FSS_Pretix_API {
 		return self::request( 'POST', self::org() . 'customers/', array(
 			'email'      => $email,
 			'name_parts' => $name_parts,
-			'locale'     => FSS_Pretix_Settings::get( 'locale' ),
+			'locale'     => Pretix_Sync_Settings::get( 'locale' ),
 			'send_email' => (bool) $send_email,
 		) );
 	}
@@ -124,11 +127,11 @@ class FSS_Pretix_API {
 	public static function create_membership( $customer_id, $name_parts ) {
 		return self::request( 'POST', self::org() . 'memberships/', array(
 			'customer'            => $customer_id,
-			'membership_type'     => (int) FSS_Pretix_Settings::get( 'membership_type' ),
-			'date_start'          => FSS_Pretix_Settings::get( 'valid_from' ),
-			'date_end'            => FSS_Pretix_Settings::get( 'valid_until' ),
+			'membership_type'     => (int) Pretix_Sync_Settings::get( 'membership_type' ),
+			'date_start'          => Pretix_Sync_Settings::get( 'valid_from' ),
+			'date_end'            => Pretix_Sync_Settings::get( 'valid_until' ),
 			'attendee_name_parts' => $name_parts,
-			'testmode'            => FSS_Pretix_Settings::is_testmode(),
+			'testmode'            => Pretix_Sync_Settings::is_testmode(),
 		) );
 	}
 
@@ -141,7 +144,7 @@ class FSS_Pretix_API {
 	 * Moving date_end before date_start makes it invalid for every lecture.
 	 */
 	public static function revoke_membership( $id ) {
-		$start = new DateTime( FSS_Pretix_Settings::get( 'valid_from' ) );
+		$start = new DateTime( Pretix_Sync_Settings::get( 'valid_from' ) );
 		$start->modify( '-1 second' );
 		return self::update_membership( $id, array( 'date_end' => $start->format( 'c' ) ) );
 	}
@@ -202,7 +205,7 @@ class FSS_Pretix_API {
 	/* ---------- lecture registrations (orders in the lectures event) ---------- */
 
 	private static function ev() {
-		return self::org() . 'events/' . rawurlencode( FSS_Pretix_Settings::get( 'talks_event' ) ) . '/';
+		return self::org() . 'events/' . rawurlencode( Pretix_Sync_Settings::get( 'talks_event' ) ) . '/';
 	}
 
 	public static function get_order( $event_slug, $code ) {
@@ -216,7 +219,7 @@ class FSS_Pretix_API {
 	/* ---------- pass tickets (orders in the passes event, used for badge printing) ---------- */
 
 	private static function pev() {
-		return self::org() . 'events/' . rawurlencode( FSS_Pretix_Settings::get( 'passes_event' ) ) . '/';
+		return self::org() . 'events/' . rawurlencode( Pretix_Sync_Settings::get( 'passes_event' ) ) . '/';
 	}
 
 	/**
@@ -233,9 +236,9 @@ class FSS_Pretix_API {
 			'attendee_name_parts' => $name_parts,
 		);
 		$body     = array(
-			'locale'     => FSS_Pretix_Settings::get( 'locale' ),
+			'locale'     => Pretix_Sync_Settings::get( 'locale' ),
 			'status'     => 'p',
-			'testmode'   => FSS_Pretix_Settings::is_testmode(),
+			'testmode'   => Pretix_Sync_Settings::is_testmode(),
 			'send_email' => false,
 			'force'      => true,
 			'comment'    => $comment,

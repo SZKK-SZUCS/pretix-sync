@@ -9,7 +9,7 @@ defined( 'ABSPATH' ) || exit;
  *          customer, "open"/"welcome" email.
  * Every step stores its result immediately, so a re-run only does what is still missing.
  */
-class FSS_Pretix_Sync {
+class Pretix_Sync_Sync {
 
 	const MAX_ATTEMPTS = 5;
 
@@ -19,26 +19,26 @@ class FSS_Pretix_Sync {
 		add_action( 'woocommerce_order_status_refunded', array( __CLASS__, 'enqueue_revoke_order' ) );
 		add_action( 'woocommerce_order_status_cancelled', array( __CLASS__, 'enqueue_revoke_order' ) );
 
-		add_action( 'fss_pretix_sync_order', array( __CLASS__, 'sync_order' ), 10, 2 );
-		add_action( 'fss_pretix_revoke_order', array( __CLASS__, 'revoke_order' ), 10, 2 );
+		add_action( 'pretix_sync_sync_order', array( __CLASS__, 'sync_order' ), 10, 2 );
+		add_action( 'pretix_sync_revoke_order', array( __CLASS__, 'revoke_order' ), 10, 2 );
 	}
 
 	/* ---------- queueing ---------- */
 
 	public static function enqueue_order( $order_id ) {
 		$order = wc_get_order( $order_id );
-		if ( ! $order || 'yes' !== $order->get_meta( FSS_Pretix_Attendees::ORDER_FLAG ) ) {
+		if ( ! $order || 'yes' !== $order->get_meta( Pretix_Sync_Attendees::ORDER_FLAG ) ) {
 			return;
 		}
-		fss_pretix_enqueue( 'fss_pretix_sync_order', array( (int) $order_id, 0 ) );
+		pretix_sync_enqueue( 'pretix_sync_sync_order', array( (int) $order_id, 0 ) );
 	}
 
 	public static function enqueue_revoke_order( $order_id ) {
 		$order = wc_get_order( $order_id );
-		if ( ! $order || 'yes' !== $order->get_meta( FSS_Pretix_Attendees::ORDER_FLAG ) ) {
+		if ( ! $order || 'yes' !== $order->get_meta( Pretix_Sync_Attendees::ORDER_FLAG ) ) {
 			return;
 		}
-		fss_pretix_enqueue( 'fss_pretix_revoke_order', array( (int) $order_id, 0 ) );
+		pretix_sync_enqueue( 'pretix_sync_revoke_order', array( (int) $order_id, 0 ) );
 	}
 
 	private static function retry( $hook, $order_id, $attempt ) {
@@ -46,7 +46,7 @@ class FSS_Pretix_Sync {
 			return false;
 		}
 		$delays = array( 60, 300, 900, 3600, 10800 );
-		as_schedule_single_action( time() + $delays[ $attempt ], $hook, array( (int) $order_id, $attempt + 1 ), FSS_PRETIX_AS_GROUP );
+		as_schedule_single_action( time() + $delays[ $attempt ], $hook, array( (int) $order_id, $attempt + 1 ), PRETIX_SYNC_AS_GROUP );
 		return true;
 	}
 
@@ -54,33 +54,33 @@ class FSS_Pretix_Sync {
 
 	public static function sync_order( $order_id, $attempt = 0 ) {
 		$order = wc_get_order( $order_id );
-		if ( ! $order || ! in_array( $order->get_status(), array( 'processing', 'completed', FSS_Pretix_Comp::STATUS ), true ) ) {
+		if ( ! $order || ! in_array( $order->get_status(), array( 'processing', 'completed', Pretix_Sync_Comp::STATUS ), true ) ) {
 			return;
 		}
-		$open      = FSS_Pretix_Settings::registration_open();
+		$open      = Pretix_Sync_Settings::registration_open();
 		$transient = false;
 		$errors    = array();
 		$done      = array();
 
-		foreach ( FSS_Pretix_Attendees::for_order( $order ) as $row ) {
+		foreach ( Pretix_Sync_Attendees::for_order( $order ) as $row ) {
 			$a = $row['data'];
 			if ( isset( $a['status'] ) && 'revoked' === $a['status'] ) {
 				continue;
 			}
 			$err = self::sync_attendee( $order, $row['item'], $row['index'], $a, $open );
 			if ( $err ) {
-				if ( FSS_Pretix_API::is_transient( $err ) ) {
+				if ( Pretix_Sync_API::is_transient( $err ) ) {
 					$transient = true;
 				} else {
-					$errors[] = FSS_Pretix_Attendees::full_name( $a ) . ': ' . $err->get_error_message();
+					$errors[] = Pretix_Sync_Attendees::full_name( $a ) . ': ' . $err->get_error_message();
 				}
 			} else {
-				$done[] = FSS_Pretix_Attendees::full_name( $a );
+				$done[] = Pretix_Sync_Attendees::full_name( $a );
 			}
 		}
 
 		if ( $done ) {
-			$what = FSS_Pretix_Attendees::is_pass_only( $order ) ? 'pass only' : ( $open ? 'pass + lecture registration' : 'pass' );
+			$what = Pretix_Sync_Attendees::is_pass_only( $order ) ? 'pass only' : ( $open ? 'pass + lecture registration' : 'pass' );
 			$order->add_order_note( sprintf( 'pretix: %s synced (%s): %s', $what, count( $done ), implode( ', ', $done ) ) );
 		}
 		if ( $errors ) {
@@ -88,7 +88,7 @@ class FSS_Pretix_Sync {
 			self::notify_admin( $order, $errors );
 		}
 		if ( $transient ) {
-			if ( self::retry( 'fss_pretix_sync_order', $order_id, $attempt ) ) {
+			if ( self::retry( 'pretix_sync_sync_order', $order_id, $attempt ) ) {
 				$order->add_order_note( 'pretix temporarily unreachable – sync will be retried automatically.' );
 			} else {
 				$order->add_order_note( 'pretix sync failed after several attempts. Use "Re-run pretix sync" on this order.' );
@@ -102,11 +102,11 @@ class FSS_Pretix_Sync {
 	 */
 	public static function sync_attendee( $order, $item, $index, &$a, $open ) {
 		$save = function () use ( $item, $index, &$a ) {
-			FSS_Pretix_Attendees::save( $item, $index, $a );
+			Pretix_Sync_Attendees::save( $item, $index, $a );
 		};
 		$fail = function ( $err ) use ( &$a, $save ) {
 			$a['error'] = $err->get_error_message();
-			if ( ! FSS_Pretix_API::is_transient( $err ) ) {
+			if ( ! Pretix_Sync_API::is_transient( $err ) ) {
 				$a['status'] = 'error';
 			}
 			$save();
@@ -116,7 +116,7 @@ class FSS_Pretix_Sync {
 
 		// Phase 1: the pass.
 		if ( empty( $a['medium_id'] ) ) {
-			$m = FSS_Pretix_API::create_medium( FSS_Pretix_Attendees::full_name( $a ) . ' (#' . $order->get_order_number() . ')' );
+			$m = Pretix_Sync_API::create_medium( Pretix_Sync_Attendees::full_name( $a ) . ' (#' . $order->get_order_number() . ')' );
 			if ( is_wp_error( $m ) ) {
 				return $fail( $m );
 			}
@@ -140,7 +140,7 @@ class FSS_Pretix_Sync {
 
 		// Pass-only attendees (e.g. staff who get their pass handed over at the venue) stop here on purpose: no
 		// email, no pretix account, no membership, no lecture registration - also after registration opens.
-		if ( FSS_Pretix_Attendees::is_pass_only( $order ) ) {
+		if ( Pretix_Sync_Attendees::is_pass_only( $order ) ) {
 			$a['status'] = 'passonly';
 			$save();
 			return null;
@@ -148,7 +148,7 @@ class FSS_Pretix_Sync {
 
 		if ( ! $open ) {
 			if ( empty( $a['mail_ticket'] ) ) {
-				FSS_Pretix_Mailer::send( 'ticket', $a, $order );
+				Pretix_Sync_Mailer::send( 'ticket', $a, $order );
 				$a['mail_ticket'] = time();
 			}
 			$a['status'] = 'pass';
@@ -158,14 +158,14 @@ class FSS_Pretix_Sync {
 
 		// Phase 2: account + membership.
 		if ( empty( $a['customer_id'] ) ) {
-			$c = FSS_Pretix_API::find_customer_by_email( $a['email'] );
+			$c = Pretix_Sync_API::find_customer_by_email( $a['email'] );
 			if ( is_wp_error( $c ) ) {
 				return $fail( $c );
 			}
 			if ( $c ) {
 				$a['customer_new'] = false;
 			} else {
-				$c = FSS_Pretix_API::create_customer( $a['email'], FSS_Pretix_Attendees::name_parts( $a ), true );
+				$c = Pretix_Sync_API::create_customer( $a['email'], Pretix_Sync_Attendees::name_parts( $a ), true );
 				if ( is_wp_error( $c ) ) {
 					return $fail( $c );
 				}
@@ -176,7 +176,7 @@ class FSS_Pretix_Sync {
 		}
 
 		if ( empty( $a['membership_id'] ) ) {
-			$ms = FSS_Pretix_API::create_membership( $a['customer_id'], FSS_Pretix_Attendees::name_parts( $a ) );
+			$ms = Pretix_Sync_API::create_membership( $a['customer_id'], Pretix_Sync_Attendees::name_parts( $a ) );
 			if ( is_wp_error( $ms ) ) {
 				return $fail( $ms );
 			}
@@ -185,7 +185,7 @@ class FSS_Pretix_Sync {
 		}
 
 		if ( empty( $a['medium_linked'] ) ) {
-			$r = FSS_Pretix_API::update_medium( $a['medium_id'], array( 'customer' => $a['customer_id'] ) );
+			$r = Pretix_Sync_API::update_medium( $a['medium_id'], array( 'customer' => $a['customer_id'] ) );
 			if ( is_wp_error( $r ) ) {
 				return $fail( $r );
 			}
@@ -194,7 +194,7 @@ class FSS_Pretix_Sync {
 		}
 
 		if ( empty( $a['mail_open'] ) ) {
-			FSS_Pretix_Mailer::send( empty( $a['mail_ticket'] ) ? 'welcome' : 'open', $a, $order );
+			Pretix_Sync_Mailer::send( empty( $a['mail_ticket'] ) ? 'welcome' : 'open', $a, $order );
 			$a['mail_open'] = time();
 		}
 		$a['status'] = 'registered';
@@ -210,21 +210,21 @@ class FSS_Pretix_Sync {
 	 * @return WP_Error|null
 	 */
 	private static function sync_pass_ticket( $order, $item, &$a, $save ) {
-		if ( ! FSS_Pretix_Settings::passes_enabled() || empty( $a['medium_id'] ) ) {
+		if ( ! Pretix_Sync_Settings::passes_enabled() || empty( $a['medium_id'] ) ) {
 			return null;
 		}
-		$pass_item = FSS_Pretix_Settings::pass_item_for( $item->get_product() );
+		$pass_item = Pretix_Sync_Settings::pass_item_for( $item->get_product() );
 		if ( ! $pass_item ) {
 			return null;
 		}
 
-		$team = FSS_Pretix_Attendees::team_name( $order );
+		$team = Pretix_Sync_Attendees::team_name( $order );
 
 		if ( empty( $a['pass_order'] ) ) {
-			$o = FSS_Pretix_API::create_pass_order(
+			$o = Pretix_Sync_API::create_pass_order(
 				isset( $a['email'] ) ? $a['email'] : '',
 				$pass_item,
-				FSS_Pretix_Attendees::name_parts( $a ),
+				Pretix_Sync_Attendees::name_parts( $a ),
 				'WooCommerce #' . $order->get_order_number() . ' – ' . $item->get_name(),
 				$team
 			);
@@ -238,7 +238,7 @@ class FSS_Pretix_Sync {
 		}
 
 		if ( empty( $a['pass_linked'] ) ) {
-			$r = FSS_Pretix_Webhook::update_links( $a['medium_id'], array(), array( $a['pass_position'] ) );
+			$r = Pretix_Sync_Webhook::update_links( $a['medium_id'], array(), array( $a['pass_position'] ) );
 			if ( is_wp_error( $r ) ) {
 				return $r;
 			}
@@ -262,16 +262,16 @@ class FSS_Pretix_Sync {
 		if ( empty( $a['medium_id'] ) ) {
 			return null;
 		}
-		$all_access = FSS_Pretix_Settings::all_access_item_for( $item->get_product() );
+		$all_access = Pretix_Sync_Settings::all_access_item_for( $item->get_product() );
 		if ( ! $all_access ) {
 			return null;
 		}
 
 		if ( empty( $a['all_access_order'] ) ) {
-			$o = FSS_Pretix_API::create_all_access_order(
+			$o = Pretix_Sync_API::create_all_access_order(
 				isset( $a['email'] ) ? $a['email'] : '',
 				$all_access,
-				FSS_Pretix_Attendees::name_parts( $a ),
+				Pretix_Sync_Attendees::name_parts( $a ),
 				'WooCommerce #' . $order->get_order_number() . ' – ' . $item->get_name() . ' (all access)'
 			);
 			if ( is_wp_error( $o ) ) {
@@ -283,7 +283,7 @@ class FSS_Pretix_Sync {
 		}
 
 		if ( empty( $a['all_access_linked'] ) ) {
-			$r = FSS_Pretix_Webhook::update_links( $a['medium_id'], array(), array( $a['all_access_position'] ) );
+			$r = Pretix_Sync_Webhook::update_links( $a['medium_id'], array(), array( $a['all_access_position'] ) );
 			if ( is_wp_error( $r ) ) {
 				return $r;
 			}
@@ -307,9 +307,9 @@ class FSS_Pretix_Sync {
 		if ( $written === $team || ! empty( $a['pass_canceled'] ) ) {
 			return null;
 		}
-		$r = FSS_Pretix_API::update_pass_position( $a['pass_position'], array( 'company' => $team ) );
+		$r = Pretix_Sync_API::update_pass_position( $a['pass_position'], array( 'company' => $team ) );
 		if ( is_wp_error( $r ) ) {
-			return FSS_Pretix_API::is_transient( $r ) ? $r : null;
+			return Pretix_Sync_API::is_transient( $r ) ? $r : null;
 		}
 		$a['pass_company'] = $team;
 		$save();
@@ -326,20 +326,20 @@ class FSS_Pretix_Sync {
 		$transient = false;
 		$errors    = array();
 		$done      = array();
-		foreach ( FSS_Pretix_Attendees::for_order( $order ) as $row ) {
+		foreach ( Pretix_Sync_Attendees::for_order( $order ) as $row ) {
 			$a = $row['data'];
 			if ( isset( $a['status'] ) && 'revoked' === $a['status'] ) {
 				continue;
 			}
 			$err = self::revoke_attendee( $order, $row['item'], $row['index'], $a );
 			if ( $err ) {
-				if ( FSS_Pretix_API::is_transient( $err ) ) {
+				if ( Pretix_Sync_API::is_transient( $err ) ) {
 					$transient = true;
 				} else {
-					$errors[] = FSS_Pretix_Attendees::full_name( $a ) . ': ' . $err->get_error_message();
+					$errors[] = Pretix_Sync_Attendees::full_name( $a ) . ': ' . $err->get_error_message();
 				}
 			} else {
-				$done[] = FSS_Pretix_Attendees::full_name( $a );
+				$done[] = Pretix_Sync_Attendees::full_name( $a );
 			}
 		}
 		if ( $done ) {
@@ -349,7 +349,7 @@ class FSS_Pretix_Sync {
 			$order->add_order_note( "pretix revoke ERROR:\n" . implode( "\n", $errors ) );
 			self::notify_admin( $order, $errors );
 		}
-		if ( $transient && ! self::retry( 'fss_pretix_revoke_order', $order_id, $attempt ) ) {
+		if ( $transient && ! self::retry( 'pretix_sync_revoke_order', $order_id, $attempt ) ) {
 			$order->add_order_note( 'pretix revoke failed after several attempts – please check manually.' );
 		}
 	}
@@ -361,16 +361,16 @@ class FSS_Pretix_Sync {
 	 */
 	public static function revoke_attendee( $order, $item, $index, &$a ) {
 		$save = function () use ( $item, $index, &$a ) {
-			FSS_Pretix_Attendees::save( $item, $index, $a );
+			Pretix_Sync_Attendees::save( $item, $index, $a );
 		};
 
 		// 1. Lecture registrations – unless the same pretix account still holds another valid ticket.
 		if ( ! empty( $a['customer_id'] ) && empty( $a['regs_canceled'] ) ) {
-			$key = FSS_Pretix_Attendees::key( $order, $item, $index );
+			$key = Pretix_Sync_Attendees::key( $order, $item, $index );
 			if ( ! self::customer_has_other_ticket( $a['customer_id'], $key ) ) {
 				$page = 1;
 				do {
-					$list = FSS_Pretix_API::list_orders( array( 'customer' => $a['customer_id'], 'page' => (string) $page ) );
+					$list = Pretix_Sync_API::list_orders( array( 'customer' => $a['customer_id'], 'page' => (string) $page ) );
 					if ( is_wp_error( $list ) ) {
 						$a['error'] = $list->get_error_message();
 						$save();
@@ -378,7 +378,7 @@ class FSS_Pretix_Sync {
 					}
 					foreach ( $list['results'] as $o ) {
 						if ( in_array( $o['status'], array( 'p', 'n' ), true ) ) {
-							$r = FSS_Pretix_API::cancel_order( $o['code'] );
+							$r = Pretix_Sync_API::cancel_order( $o['code'] );
 							if ( is_wp_error( $r ) ) {
 								$a['error'] = $r->get_error_message();
 								$save();
@@ -395,7 +395,7 @@ class FSS_Pretix_Sync {
 
 		// 2. Membership.
 		if ( ! empty( $a['membership_id'] ) && empty( $a['membership_revoked'] ) ) {
-			$r = FSS_Pretix_API::revoke_membership( $a['membership_id'] );
+			$r = Pretix_Sync_API::revoke_membership( $a['membership_id'] );
 			if ( is_wp_error( $r ) ) {
 				$a['error'] = $r->get_error_message();
 				$save();
@@ -407,7 +407,7 @@ class FSS_Pretix_Sync {
 
 		// 3. Pass ticket (badge).
 		if ( ! empty( $a['pass_order'] ) && empty( $a['pass_canceled'] ) ) {
-			$r = FSS_Pretix_API::cancel_pass_order( $a['pass_order'] );
+			$r = Pretix_Sync_API::cancel_pass_order( $a['pass_order'] );
 			if ( is_wp_error( $r ) ) {
 				$d = $r->get_error_data();
 				// 400 = already canceled; anything else is a real error.
@@ -423,7 +423,7 @@ class FSS_Pretix_Sync {
 
 		// 3b. All-access ticket in the lectures event (staff).
 		if ( ! empty( $a['all_access_order'] ) && empty( $a['all_access_canceled'] ) ) {
-			$r = FSS_Pretix_API::cancel_all_access_order( $a['all_access_order'] );
+			$r = Pretix_Sync_API::cancel_all_access_order( $a['all_access_order'] );
 			if ( is_wp_error( $r ) ) {
 				$d = $r->get_error_data();
 				if ( ! isset( $d['status'] ) || 400 !== (int) $d['status'] ) { // 400 = already canceled
@@ -438,7 +438,7 @@ class FSS_Pretix_Sync {
 
 		// 4. Pass.
 		if ( ! empty( $a['medium_id'] ) && empty( $a['medium_revoked'] ) ) {
-			$r = FSS_Pretix_API::update_medium( $a['medium_id'], array( 'active' => false, 'linked_orderpositions' => array() ) );
+			$r = Pretix_Sync_API::update_medium( $a['medium_id'], array( 'active' => false, 'linked_orderpositions' => array() ) );
 			if ( is_wp_error( $r ) ) {
 				$a['error'] = $r->get_error_message();
 				$save();
@@ -456,14 +456,14 @@ class FSS_Pretix_Sync {
 
 	/** Does another, non-revoked attendee record use the same pretix account? */
 	private static function customer_has_other_ticket( $customer_id, $exclude_key ) {
-		foreach ( FSS_Pretix_Attendees::order_ids() as $oid ) {
+		foreach ( Pretix_Sync_Attendees::order_ids() as $oid ) {
 			$o = wc_get_order( $oid );
 			if ( ! $o ) {
 				continue;
 			}
-			foreach ( FSS_Pretix_Attendees::for_order( $o ) as $row ) {
+			foreach ( Pretix_Sync_Attendees::for_order( $o ) as $row ) {
 				$d = $row['data'];
-				if ( FSS_Pretix_Attendees::key( $o, $row['item'], $row['index'] ) === $exclude_key ) {
+				if ( Pretix_Sync_Attendees::key( $o, $row['item'], $row['index'] ) === $exclude_key ) {
 					continue;
 				}
 				if ( ! empty( $d['customer_id'] ) && $d['customer_id'] === $customer_id && ( ! isset( $d['status'] ) || 'revoked' !== $d['status'] ) ) {
@@ -483,17 +483,17 @@ class FSS_Pretix_Sync {
 	 * @return WP_Error|string  message
 	 */
 	public static function edit_attendee( $order, $item, $index, $new ) {
-		$list = $item->get_meta( FSS_Pretix_Attendees::ITEM_META );
+		$list = $item->get_meta( Pretix_Sync_Attendees::ITEM_META );
 		$a    = $list[ $index ];
 
 		$old_email = isset( $a['email'] ) ? $a['email'] : '';
 
 		// Pass-only attendees have no account and may have no email at all: adding or changing it must not replace
 		// the person (a new email would otherwise mean a new pass). Only the stored address is updated.
-		if ( FSS_Pretix_Attendees::is_pass_only( $order ) && strtolower( $new['email'] ) !== strtolower( $old_email ) ) {
+		if ( Pretix_Sync_Attendees::is_pass_only( $order ) && strtolower( $new['email'] ) !== strtolower( $old_email ) ) {
 			$a['email'] = strtolower( $new['email'] );
 			if ( '' !== $a['email'] && ! empty( $a['pass_position'] ) && empty( $a['pass_canceled'] ) ) {
-				$r = FSS_Pretix_API::update_pass_position( $a['pass_position'], array( 'attendee_email' => $a['email'] ) );
+				$r = Pretix_Sync_API::update_pass_position( $a['pass_position'], array( 'attendee_email' => $a['email'] ) );
 				if ( is_wp_error( $r ) ) {
 					return $r;
 				}
@@ -520,8 +520,8 @@ class FSS_Pretix_Sync {
 				'status'      => 'new',
 				'history'     => $history,
 			);
-			FSS_Pretix_Attendees::save( $item, $index, $fresh );
-			$err = self::sync_attendee( $order, $item, $index, $fresh, FSS_Pretix_Settings::registration_open() );
+			Pretix_Sync_Attendees::save( $item, $index, $fresh );
+			$err = self::sync_attendee( $order, $item, $index, $fresh, Pretix_Sync_Settings::registration_open() );
 			if ( $err ) {
 				return $err;
 			}
@@ -531,28 +531,28 @@ class FSS_Pretix_Sync {
 		$a['title']       = $new['title'];
 		$a['given_name']  = $new['given_name'];
 		$a['family_name'] = $new['family_name'];
-		FSS_Pretix_Attendees::save( $item, $index, $a );
+		Pretix_Sync_Attendees::save( $item, $index, $a );
 
 		if ( ! empty( $a['membership_id'] ) ) {
-			$r = FSS_Pretix_API::update_membership( $a['membership_id'], array( 'attendee_name_parts' => FSS_Pretix_Attendees::name_parts( $a ) ) );
+			$r = Pretix_Sync_API::update_membership( $a['membership_id'], array( 'attendee_name_parts' => Pretix_Sync_Attendees::name_parts( $a ) ) );
 			if ( is_wp_error( $r ) ) {
 				return $r;
 			}
 		}
 		if ( ! empty( $a['pass_position'] ) && empty( $a['pass_canceled'] ) ) {
-			$r = FSS_Pretix_API::update_pass_position( $a['pass_position'], array( 'attendee_name_parts' => FSS_Pretix_Attendees::name_parts( $a ) ) );
+			$r = Pretix_Sync_API::update_pass_position( $a['pass_position'], array( 'attendee_name_parts' => Pretix_Sync_Attendees::name_parts( $a ) ) );
 			if ( is_wp_error( $r ) ) {
 				return $r;
 			}
 		}
 		if ( ! empty( $a['all_access_position'] ) && empty( $a['all_access_canceled'] ) ) {
-			$r = FSS_Pretix_API::update_all_access_position( $a['all_access_position'], array( 'attendee_name_parts' => FSS_Pretix_Attendees::name_parts( $a ) ) );
+			$r = Pretix_Sync_API::update_all_access_position( $a['all_access_position'], array( 'attendee_name_parts' => Pretix_Sync_Attendees::name_parts( $a ) ) );
 			if ( is_wp_error( $r ) ) {
 				return $r;
 			}
 		}
 		if ( ! empty( $a['medium_id'] ) ) {
-			$r = FSS_Pretix_API::update_medium( $a['medium_id'], array( 'label' => FSS_Pretix_Attendees::full_name( $a ) . ' (#' . $order->get_order_number() . ')' ) );
+			$r = Pretix_Sync_API::update_medium( $a['medium_id'], array( 'label' => Pretix_Sync_Attendees::full_name( $a ) . ' (#' . $order->get_order_number() . ')' ) );
 			if ( is_wp_error( $r ) ) {
 				return $r;
 			}
@@ -566,18 +566,18 @@ class FSS_Pretix_Sync {
 		$to = get_option( 'admin_email' );
 		wp_mail(
 			$to,
-			sprintf( '[FSS pretix] Sync problem on order #%s', $order->get_order_number() ),
+			sprintf( '[Pretix Sync] Sync problem on order #%s', $order->get_order_number() ),
 			"Order: " . $order->get_edit_order_url() . "\n\n" . implode( "\n", $errors )
 		);
 	}
 
 	/** Open lecture registration: flag + queue every paid order. */
 	public static function open_registration() {
-		update_option( 'fss_pretix_registration_open', 'yes' );
-		update_option( 'fss_pretix_registration_opened_at', time() );
-		$ids = FSS_Pretix_Attendees::order_ids();
+		update_option( 'pretix_sync_registration_open', 'yes' );
+		update_option( 'pretix_sync_registration_opened_at', time() );
+		$ids = Pretix_Sync_Attendees::order_ids();
 		foreach ( $ids as $id ) {
-			fss_pretix_enqueue( 'fss_pretix_sync_order', array( (int) $id, 0 ) );
+			pretix_sync_enqueue( 'pretix_sync_sync_order', array( (int) $id, 0 ) );
 		}
 		return count( $ids );
 	}
