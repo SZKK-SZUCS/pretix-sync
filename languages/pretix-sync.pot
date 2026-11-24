@@ -10,15 +10,23 @@ msgstr ""
 msgid " (booked by %s)"
 msgstr ""
 
-#: includes/class-checkout.php:121
+#: includes/class-fields.php:177
+msgid "%1$s: %2$s is required."
+msgstr ""
+
+#: includes/class-checkout.php:125
 msgid "%1$s: this email address is already used for %2$s. Every attendee needs their own email address."
 msgstr ""
 
-#: includes/class-checkout.php:118
+#: includes/class-fields.php:168
+msgid "%s is required."
+msgstr ""
+
+#: includes/class-checkout.php:122
 msgid "%s: please enter a valid email address."
 msgstr ""
 
-#: includes/class-checkout.php:114
+#: includes/class-checkout.php:118
 msgid "%s: please enter the given name and family name."
 msgstr ""
 
@@ -54,15 +62,23 @@ msgstr ""
 msgid "API token: create a team in pretix (Organizer → Teams) with an API token that may manage customer accounts and reusable media for the organizer, and view and change orders in the events used. Put the token in the PRETIX_SYNC_TOKEN constant in wp-config.php, an environment variable or a Docker secret; the settings field is only the last fallback and is stored in the database."
 msgstr ""
 
+#: includes/class-fields.php:267
+msgid "Add field"
+msgstr ""
+
 #: includes/class-help.php:35
 msgid "All work runs in the Action Scheduler queue (group pretix-sync). A temporary pretix outage is retried automatically; real errors go to the order notes, to the log (WooCommerce → Status → Logs, source pretix-sync) and by email to the site admin address."
 msgstr ""
 
-#: includes/class-checkout.php:63
+#: includes/class-fields.php:262
+msgid "Applies to"
+msgstr ""
+
+#: includes/class-checkout.php:65
 msgid "Attendee %1$d – %2$s"
 msgstr ""
 
-#: includes/class-checkout.php:110
+#: includes/class-checkout.php:114
 msgid "Attendee %d"
 msgstr ""
 
@@ -74,7 +90,7 @@ msgstr ""
 msgid "Attendee details (and any custom checkout fields) are collected per ticket at checkout, so every attendee has their own pass and email."
 msgstr ""
 
-#: includes/class-checkout.php:160 includes/class-checkout.php:166
+#: includes/class-checkout.php:179 includes/class-checkout.php:185
 msgid "Attendees:"
 msgstr ""
 
@@ -86,15 +102,35 @@ msgstr ""
 msgid "Check that it works: register a test attendee for a session, then look for “Pass …: registration … linked” in the log (WooCommerce → Status → Logs, source pretix-sync)."
 msgstr ""
 
+#: includes/class-fields.php:27
+msgid "Checkbox"
+msgstr ""
+
+#: includes/class-fields.php:260
+msgid "Checkout fields"
+msgstr ""
+
+#: includes/class-fields.php:26
+msgid "Choice list"
+msgstr ""
+
+#: includes/class-fields.php:262
+msgid "Choices"
+msgstr ""
+
 #: includes/class-help.php:47
 msgid "Customer account language and Event name: the pretix account gets the language of the order (English or Hungarian), the fallback is used for any other language; the event name is used in the emails."
+msgstr ""
+
+#: includes/class-fields.php:34
+msgid "Each attendee"
 msgstr ""
 
 #: includes/class-help.php:39
 msgid "Each setting on the Pretix Sync settings tab maps to something in pretix. Use “Test pretix connection” below after filling them in."
 msgstr ""
 
-#: includes/class-checkout.php:86
+#: includes/class-checkout.php:88
 msgid "Email address"
 msgstr ""
 
@@ -106,7 +142,11 @@ msgstr ""
 msgid "Every step saves its result immediately, so a re-run only does what is still missing. “Re-run sync for all orders” is safe to click at any time."
 msgstr ""
 
-#: includes/class-checkout.php:80
+#: includes/class-fields.php:261
+msgid "Extra questions at the checkout, besides the attendee title, name and email. A field applies to the whole order (asked once) or to each attendee. The field chosen under “Print on badge” is written to the badge ticket in the passes event (pretix “Attendee company” element). Clear the label of a field and save to remove it."
+msgstr ""
+
+#: includes/class-checkout.php:82
 msgid "Family name"
 msgstr ""
 
@@ -114,7 +154,7 @@ msgstr ""
 msgid "From payment to registration"
 msgstr ""
 
-#: includes/class-checkout.php:74
+#: includes/class-checkout.php:76
 msgid "Given name"
 msgstr ""
 
@@ -122,7 +162,7 @@ msgstr ""
 msgid "How Pretix Sync works"
 msgstr ""
 
-#: includes/class-settings.php:193
+#: includes/class-settings.php:194
 msgid "How every setting and the webhook work is explained under the Webhook section of the Pretix Sync page."
 msgstr ""
 
@@ -130,8 +170,16 @@ msgstr ""
 msgid "How it works – overview"
 msgstr ""
 
+#: includes/class-fields.php:262
+msgid "Label"
+msgstr ""
+
 #: includes/class-help.php:81
 msgid "Logs: WooCommerce → Status → Logs, source pretix-sync. Queue: Tools → Scheduled Actions, group pretix-sync (failed and pending jobs, with retries)."
+msgstr ""
+
+#: includes/class-fields.php:25
+msgid "Long text"
 msgstr ""
 
 #: includes/class-help.php:44
@@ -140,6 +188,18 @@ msgstr ""
 
 #: includes/class-help.php:45
 msgid "Membership valid from / until: ISO 8601 with a time zone offset. The window must start before the first session and end after the last one, otherwise pretix does not accept the membership for those sessions."
+msgstr ""
+
+#: includes/class-comp.php:67
+msgid "No ticket product yet. Open the WooCommerce product, tick “Pretix ticket” under Product data → General and save it."
+msgstr ""
+
+#: includes/class-fields.php:267
+msgid "Nothing on the badge"
+msgstr ""
+
+#: includes/class-fields.php:253
+msgid "One choice per line"
 msgstr ""
 
 #: includes/class-help.php:53
@@ -158,6 +218,10 @@ msgstr ""
 msgid "Passes event slug (optional): a pretix event with one free pass ticket per attendee, used for badge printing (Badges → QR code: Reusable Medium ID). Set the matching pass item ID on each WooCommerce ticket product. Empty = no badge tickets."
 msgstr ""
 
+#: includes/class-fields.php:131
+msgid "Please choose…"
+msgstr ""
+
 #: includes/class-checkout.php:53
 msgid "Please enter the details of each attendee. Every attendee receives their own email with their pass and the session registration link."
 msgstr ""
@@ -170,8 +234,16 @@ msgstr ""
 msgid "Pretix Sync connects the WooCommerce shop to pretix. The buyer pays in WooCommerce; the plugin then creates everything in pretix through the pretix API, in the background, so the checkout never waits for pretix."
 msgstr ""
 
+#: includes/class-fields.php:262
+msgid "Print on badge"
+msgstr ""
+
 #: includes/class-help.php:75
 msgid "Refunds and cancellations"
+msgstr ""
+
+#: includes/class-fields.php:262
+msgid "Required"
 msgstr ""
 
 #: includes/class-help.php:70
@@ -202,6 +274,10 @@ msgstr ""
 msgid "Test mode: memberships and orders are created in pretix test mode. Only use it while the pretix event is in test mode too."
 msgstr ""
 
+#: includes/class-fields.php:24
+msgid "Text"
+msgstr ""
+
 #: includes/class-help.php:66
 msgid "The call only carries the event and the order code. The plugin answers at once and does the work in the queue: it fetches the real state of the order from the pretix API, so repeated or out-of-order calls do no harm. Calls for other events are ignored."
 msgstr ""
@@ -222,8 +298,12 @@ msgstr ""
 msgid "Ticket confirmed (session registration not open yet, or sessions module off)"
 msgstr ""
 
-#: includes/class-checkout.php:67
+#: includes/class-checkout.php:69
 msgid "Title"
+msgstr ""
+
+#: includes/class-fields.php:262
+msgid "Type"
 msgstr ""
 
 #: includes/class-help.php:61
@@ -246,6 +326,14 @@ msgstr ""
 msgid "Where to look when something is wrong"
 msgstr ""
 
+#: includes/class-fields.php:33
+msgid "Whole order (asked once)"
+msgstr ""
+
+#: includes/class-fields.php:217
+msgid "Yes"
+msgstr ""
+
 #: includes/class-mailer.php:30 includes/class-mailer.php:42
 msgid "Your ticket is confirmed"
 msgstr ""
@@ -258,7 +346,7 @@ msgstr ""
 msgid "Your {event_name} ticket – register for sessions"
 msgstr ""
 
-#: includes/class-checkout.php:69
+#: includes/class-checkout.php:71
 msgid "e.g. Dr."
 msgstr ""
 

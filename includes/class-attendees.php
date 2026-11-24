@@ -7,8 +7,9 @@ defined( 'ABSPATH' ) || exit;
  * Attendees live on the order line item as meta "_pretix_sync_attendees": a list of arrays with
  *   title, given_name, family_name, email            – entered at checkout
  *   medium_id, medium_identifier                      – phase 1 (pass QR)
+ *   custom                                            – values of the attendee-level custom checkout fields (key => value)
  *   pass_order, pass_position, pass_linked, pass_company – badge ticket in the passes event; pass_company is the
- *                                                       team name last written to it (to detect changes)
+ *                                                       badge text last written to it (to detect changes)
  *   customer_id, customer_new, membership_id          – phase 2 (session registration right)
  *   all_access_order, all_access_position, all_access_linked, all_access_canceled
  *                                                     – free all-access ticket in the sessions event (staff), linked to the pass
@@ -74,12 +75,9 @@ class Pretix_Sync_Attendees {
 		);
 	}
 
-	/**
-	 * Team name of the order, printed on the badge. It is an order-level custom field ("team_name", added by the
-	 * Checkout Form plugin at checkout; the complimentary form sets the same key), not part of the attendee data.
-	 */
-	public static function team_name( $order ) {
-		return trim( (string) $order->get_meta( 'team_name' ) );
+	/** Text printed on the badge: the checkout field marked "Print on badge", or the text of the complimentary form. */
+	public static function badge_text( $order, $a = array() ) {
+		return Pretix_Sync_Fields::badge_text( $order, $a );
 	}
 
 	public static function full_name( $a ) {

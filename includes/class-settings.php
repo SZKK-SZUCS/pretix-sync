@@ -185,6 +185,7 @@ class Pretix_Sync_Settings {
 	public static function render() {
 		Pretix_Sync_Mailer::show_defaults();
 		woocommerce_admin_fields( self::fields() );
+		Pretix_Sync_Fields::render_editor();
 		if ( self::sessions_enabled() ) {
 		echo '<h2>pretix webhook</h2><p>Create a webhook in pretix (Organizer → Webhooks) with this target URL:</p>';
 		echo '<p><input type="text" readonly style="width:100%;max-width:900px" value="' . esc_attr( self::webhook_url() ) . '" onclick="this.select()"></p>';
@@ -197,6 +198,7 @@ class Pretix_Sync_Settings {
 	public static function save() {
 		Pretix_Sync_Mailer::store_defaults_as_empty();
 		woocommerce_update_options( self::fields() );
+		Pretix_Sync_Fields::save_from_post();
 	}
 
 	/* ---------- product flag ---------- */

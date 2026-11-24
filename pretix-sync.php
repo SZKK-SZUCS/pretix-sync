@@ -35,6 +35,7 @@ add_action( 'before_woocommerce_init', function () {
 
 require_once PRETIX_SYNC_DIR . 'includes/class-i18n.php';
 require_once PRETIX_SYNC_DIR . 'includes/class-settings.php';
+require_once PRETIX_SYNC_DIR . 'includes/class-fields.php';
 require_once PRETIX_SYNC_DIR . 'includes/class-api.php';
 require_once PRETIX_SYNC_DIR . 'includes/class-attendees.php';
 require_once PRETIX_SYNC_DIR . 'includes/class-checkout.php';

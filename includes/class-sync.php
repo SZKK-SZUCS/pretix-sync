@@ -218,7 +218,7 @@ class Pretix_Sync_Sync {
 			return null;
 		}
 
-		$team = Pretix_Sync_Attendees::team_name( $order );
+		$team = Pretix_Sync_Attendees::badge_text( $order, $a );
 
 		if ( empty( $a['pass_order'] ) ) {
 			$o = Pretix_Sync_API::create_pass_order(
@@ -246,8 +246,8 @@ class Pretix_Sync_Sync {
 			$save();
 		}
 
-		// Runs for new and existing passes alike, so "Re-run sync for all orders" fills in the team name on passes
-		// created before this field was sent, and picks up later edits of the order's team name.
+		// Runs for new and existing passes alike, so "Re-run sync for all orders" fills in the badge text on passes
+		// created before it was sent, and picks up later edits of it.
 		return self::sync_pass_company( $a, $team, $save );
 	}
 
@@ -294,7 +294,7 @@ class Pretix_Sync_Sync {
 	}
 
 	/**
-	 * Writes the team name to the badge ticket's "company" field when it differs from what was written last.
+	 * Writes the badge text to the badge ticket's "company" field when it differs from what was written last.
 	 *
 	 * Only transient errors are returned (the queue retries them). Any other failure is already in the log and is
 	 * deliberately not fatal: the team name is cosmetic and must not block the session registration. The stored

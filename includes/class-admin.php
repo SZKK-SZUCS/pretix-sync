@@ -174,7 +174,7 @@ class Pretix_Sync_Admin {
 		header( 'Content-Disposition: attachment; filename=pretix-sync-passes-' . gmdate( 'Ymd-His' ) . '.csv' );
 		$out = fopen( 'php://output', 'w' );
 		fwrite( $out, "\xEF\xBB\xBF" ); // Excel UTF-8 BOM.
-		fputcsv( $out, array( 'Order', 'Order date', 'Ticket type', 'Title', 'Given name', 'Family name', 'Email', 'Pass QR code', 'Badge ticket (pretix)', 'Status', 'Buyer', 'Buyer email', 'Company' ) );
+		fputcsv( $out, array_merge( array( 'Order', 'Order date', 'Ticket type', 'Title', 'Given name', 'Family name', 'Email', 'Pass QR code', 'Badge ticket (pretix)', 'Status', 'Buyer', 'Buyer email', 'Company' ), self::custom_headers() ) );
 		foreach ( Pretix_Sync_Attendees::order_ids() as $oid ) {
 			$o = wc_get_order( $oid );
 			if ( ! $o ) {
@@ -182,7 +182,7 @@ class Pretix_Sync_Admin {
 			}
 			foreach ( Pretix_Sync_Attendees::for_order( $o ) as $row ) {
 				$a = $row['data'];
-				fputcsv( $out, array(
+				fputcsv( $out, array_merge( array(
 					$o->get_order_number(),
 					$o->get_date_created() ? $o->get_date_created()->date( 'Y-m-d H:i' ) : '',
 					$row['item']->get_name(),
@@ -196,11 +196,28 @@ class Pretix_Sync_Admin {
 					trim( $o->get_billing_first_name() . ' ' . $o->get_billing_last_name() ),
 					$o->get_billing_email(),
 					$o->get_billing_company(),
-				) );
+				), self::custom_cells( $o, $a ) ) );
 			}
 		}
 		fclose( $out );
 		exit;
+	}
+
+	/** CSV columns for the custom checkout fields. */
+	private static function custom_headers() {
+		$h = array();
+		foreach ( Pretix_Sync_Fields::all() as $f ) {
+			$h[] = $f['label'];
+		}
+		return $h;
+	}
+
+	private static function custom_cells( $order, $a ) {
+		$c = array();
+		foreach ( Pretix_Sync_Fields::all() as $f ) {
+			$c[] = Pretix_Sync_Fields::display_value( $f, Pretix_Sync_Fields::value_for( $order, $a, $f ), '' );
+		}
+		return $c;
 	}
 
 	/* ---------- order meta box ---------- */
@@ -220,6 +237,12 @@ class Pretix_Sync_Admin {
 			echo '<p>No pretix attendees on this order.</p>';
 			return;
 		}
+		foreach ( Pretix_Sync_Fields::of_scope( 'order' ) as $cf ) {
+			$cv = Pretix_Sync_Fields::order_value( $order, $cf );
+			if ( '' !== $cv ) {
+				echo '<p><strong>' . esc_html( $cf['label'] ) . ':</strong> ' . esc_html( Pretix_Sync_Fields::display_value( $cf, $cv, '' ) ) . '</p>';
+			}
+		}
 		$colors = array( 'new' => '#996800', 'pass' => '#2271b1', 'passonly' => '#50575e', 'registered' => '#008a20', 'revoked' => '#8c8f94', 'error' => '#d63638' );
 		echo '<table class="widefat striped"><thead><tr><th>Ticket</th><th>Title</th><th>Given name</th><th>Family name</th><th>Email</th><th>Pass QR</th><th>Status</th><th></th></tr></thead><tbody>';
 		foreach ( $rows as $row ) {
@@ -229,7 +252,14 @@ class Pretix_Sync_Admin {
 			$f   = 'pretix_sync_edit[' . esc_attr( $key ) . ']';
 			$dis = 'revoked' === $st ? ' disabled' : '';
 			echo '<tr>';
-			echo '<td>' . esc_html( $row['item']->get_name() ) . '</td>';
+			$extra = array();
+			foreach ( Pretix_Sync_Fields::of_scope( 'attendee' ) as $cf ) {
+				$cv = Pretix_Sync_Fields::display_value( $cf, Pretix_Sync_Fields::value_for( $order, $a, $cf ), '' );
+				if ( '' !== $cv ) {
+					$extra[] = $cf['label'] . ': ' . $cv;
+				}
+			}
+			echo '<td>' . esc_html( $row['item']->get_name() ) . ( $extra ? '<br><small>' . esc_html( implode( ', ', $extra ) ) . '</small>' : '' ) . '</td>';
 			echo '<td><input type="text" name="' . $f . '[title]" value="' . esc_attr( isset( $a['title'] ) ? $a['title'] : '' ) . '" style="width:60px"' . $dis . '></td>';
 			echo '<td><input type="text" name="' . $f . '[given_name]" value="' . esc_attr( $a['given_name'] ) . '"' . $dis . '></td>';
 			echo '<td><input type="text" name="' . $f . '[family_name]" value="' . esc_attr( $a['family_name'] ) . '"' . $dis . '></td>';

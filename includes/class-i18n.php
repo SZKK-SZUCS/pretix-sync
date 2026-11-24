@@ -188,6 +188,7 @@ class Pretix_Sync_I18n {
 				}
 			}
 		}
+		Pretix_Sync_Fields::register_strings();
 		$event = (string) get_option( 'pretix_sync_event_name', '' );
 		if ( '' !== $event ) {
 			pll_register_string( 'Event name', $event, self::GROUP );

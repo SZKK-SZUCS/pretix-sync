@@ -61,6 +61,16 @@ parameters:
 			path: includes/class-comp.php
 
 		-
+			message: "#^Function pll_register_string not found\\.$#"
+			count: 2
+			path: includes/class-fields.php
+
+		-
+			message: "#^Function woocommerce_form_field not found\\.$#"
+			count: 1
+			path: includes/class-fields.php
+
+		-
 			message: "#^Function pll_current_language not found\\.$#"
 			count: 1
 			path: includes/class-i18n.php

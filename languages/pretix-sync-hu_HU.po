@@ -211,3 +211,69 @@ msgstr "Hogyan működik a Pretix Sync"
 
 msgid "How every setting and the webhook work is explained under the Webhook section of the Pretix Sync page."
 msgstr "Az egyes beállítások és a webhook működését a Pretix Sync oldal Webhook szakasza alatt találod."
+
+msgid "No ticket product yet. Open the WooCommerce product, tick “Pretix ticket” under Product data → General and save it."
+msgstr "Még nincs jegy-termék. Nyisd meg a WooCommerce terméket, jelöld be a „Pretix ticket” jelölőnégyzetet a Termékadatok → Általános alatt, és mentsd el."
+
+msgid "Text"
+msgstr "Szöveg"
+
+msgid "Long text"
+msgstr "Hosszú szöveg"
+
+msgid "Choice list"
+msgstr "Választólista"
+
+msgid "Checkbox"
+msgstr "Jelölőnégyzet"
+
+msgid "Whole order (asked once)"
+msgstr "Az egész rendelés (egyszer kérdezzük)"
+
+msgid "Each attendee"
+msgstr "Minden résztvevő"
+
+msgid "Please choose…"
+msgstr "Kérjük, válasszon…"
+
+msgid "%s is required."
+msgstr "%s megadása kötelező."
+
+msgid "%1$s: %2$s is required."
+msgstr "%1$s: %2$s megadása kötelező."
+
+msgid "Yes"
+msgstr "Igen"
+
+msgid "One choice per line"
+msgstr "Soronként egy lehetőség"
+
+msgid "Checkout fields"
+msgstr "Checkout mezők"
+
+msgid "Extra questions at the checkout, besides the attendee title, name and email. A field applies to the whole order (asked once) or to each attendee. The field chosen under “Print on badge” is written to the badge ticket in the passes event (pretix “Attendee company” element). Clear the label of a field and save to remove it."
+msgstr "Extra kérdések a pénztárban a résztvevő titulusa, neve és e-mail-címe mellett. Egy mező vonatkozhat az egész rendelésre (egyszer kérdezzük) vagy minden résztvevőre. A „Print on badge” alatt kiválasztott mező értéke a Passes event névkártya-jegyére kerül (pretix „Attendee company” elem). Egy mező törléséhez ürítsd ki a címkéjét, és mentsd el."
+
+msgid "Label"
+msgstr "Címke"
+
+msgid "Type"
+msgstr "Típus"
+
+msgid "Applies to"
+msgstr "Vonatkozik"
+
+msgid "Required"
+msgstr "Kötelező"
+
+msgid "Print on badge"
+msgstr "Névkártyára kerül"
+
+msgid "Choices"
+msgstr "Lehetőségek"
+
+msgid "Add field"
+msgstr "Mező hozzáadása"
+
+msgid "Nothing on the badge"
+msgstr "Semmi nem kerül a névkártyára"
