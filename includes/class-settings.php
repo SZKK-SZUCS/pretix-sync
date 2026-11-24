@@ -18,6 +18,30 @@ class Pretix_Sync_Settings {
 		// Product flag.
 		add_action( 'woocommerce_product_options_general_product_data', array( __CLASS__, 'product_field' ) );
 		add_action( 'woocommerce_admin_process_product_object', array( __CLASS__, 'product_save' ) );
+
+		add_action( 'admin_init', array( __CLASS__, 'migrate_legacy_product_meta' ) );
+	}
+
+	/**
+	 * Products flagged by the pre-2.0 plugin (meta keys "_fss_pretix_*") keep working: the keys are renamed once.
+	 * A product that already has the new key is left alone. Safe to run again, it only does anything while old keys exist.
+	 */
+	public static function migrate_legacy_product_meta() {
+		if ( 'yes' === get_option( 'pretix_sync_legacy_meta_migrated' ) ) {
+			return;
+		}
+		global $wpdb;
+		$pairs = array(
+			'_fss_pretix_ticket'          => self::PRODUCT_META,
+			'_fss_pretix_pass_item'       => self::PASS_ITEM_META,
+			'_fss_pretix_all_access_item' => self::ALL_ACCESS_ITEM_META,
+		);
+		foreach ( $pairs as $old => $new ) {
+			// The nested select is needed because MySQL does not allow reading the table being updated directly.
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery
+			$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->postmeta} SET meta_key = %s WHERE meta_key = %s AND post_id NOT IN ( SELECT post_id FROM ( SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = %s ) AS has_new )", $new, $old, $new ) );
+		}
+		update_option( 'pretix_sync_legacy_meta_migrated', 'yes' );
 	}
 
 	/* ---------- getters ---------- */
